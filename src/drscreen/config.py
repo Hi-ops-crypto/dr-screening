@@ -15,7 +15,7 @@ directory; all documented commands run from the repository root.
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -32,10 +32,9 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-SchemaT = TypeVar("SchemaT", bound=StrictModel)
-
-
-def load_config(path: Path, schema: type[SchemaT], overrides: Sequence[str] = ()) -> SchemaT:
+def load_config[SchemaT: StrictModel](
+    path: Path, schema: type[SchemaT], overrides: Sequence[str] = ()
+) -> SchemaT:
     """Load a YAML config file, apply overrides and validate it.
 
     Args:
