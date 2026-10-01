@@ -1,0 +1,69 @@
+# Data pipeline configuration. Schema: drscreen.data.settings.DataConfig.
+# Relative paths resolve against the working directory (the repo root).
+
+paths:
+  raw_dir: data/raw
+  manifests_dir: data/manifests
+  processed_dir: data/processed
+  reports_dir: data/reports
+
+sources:
+  aptos:
+    enabled: true
+    # Requires accepting the competition rules on kaggle.com before download.
+    kaggle_competition: aptos2019-blindness-detection
+  idrid:
+    enabled: true
+    # Mirror of the official IEEE DataPort release (CC BY 4.0), pinned version.
+    kaggle_dataset: aaryapatel98/indian-diabetic-retinopathy-image-dataset/versions/1
+  eyeq:
+    enabled: true
+    # 35,126 EyePACS training images (about 7.8 GB). Attach it in a Kaggle
+    # notebook rather than downloading locally; set enabled: false to skip.
+    kaggle_dataset: tanlikesmath/diabetic-retinopathy-resized/versions/7
+    images_subdir: resized_train/resized_train
+    label_urls:
+      - https://raw.githubusercontent.com/HzFu/EyeQ/master/data/Label_EyeQ_train.csv
+      - https://raw.githubusercontent.com/HzFu/EyeQ/master/data/Label_EyeQ_test.csv
+
+download_timeout_seconds: 60
+
+split:
+  seed: 42
+  val_fraction: 0.2
+
+preprocessing:
+  grading:
+    image_size: 512
+    # Empirical: fundus borders are near-black, so grayscale > 7 separates
+    # retina from background. Check the sample grids after changing it.
+    fundus_intensity_threshold: 7
+    # Empirical: below 10% bright pixels the image is not a usable fundus photo.
+    min_fundus_fraction: 0.1
+    # B. Graham, Kaggle DR Detection competition report, 2015:
+    # 4 * (image - GaussianBlur(image, sigma = radius / 30)) + 128.
+    # The blur here uses retina pixels only (see drscreen.data.preprocessing).
+    ben_graham:
+      sigma_radius_fraction: 0.0333
+      contrast_gain: 4.0
+      brightness_offset: 128
+      # Empirical, chosen from the IDRiD sample grids: 3% of the side (15 px at
+      # 512) removes the darkened rim many cameras leave inside the threshold.
+      edge_erosion_fraction: 0.03
+  quality:
+    # Matches the 224x224 input of the EyeQ baseline networks
+    # (Fu et al., MICCAI 2019) and keeps CPU inference fast.
+    image_size: 224
+    fundus_intensity_threshold: 7
+    min_fundus_fraction: 0.1
+    # No lighting normalisation: the quality model must see the exposure and
+    # blur problems that normalisation would hide.
+    ben_graham: null
+
+prepare:
+  workers: 4
+
+inspection:
+  samples_per_class: 6
+  thumbnail_size: 192
+  seed: 42
