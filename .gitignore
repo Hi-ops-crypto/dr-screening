@@ -16,17 +16,17 @@ dist/
 htmlcov/
 
 # Datasets, derived data and training outputs: never committed
-data/
-runs/
+/data/
+/runs/
 *.pt
 *.pth
 *.ckpt
 *.safetensors
 
 # Logs and audit trails
-logs/
+/logs/
 *.log
-audit/
+/audit/
 
 # Notebook and editor state
 .ipynb_checkpoints/
