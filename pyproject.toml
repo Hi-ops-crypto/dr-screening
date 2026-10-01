@@ -7,23 +7,33 @@ name = "drscreen"
 version = "0.1.0"
 description = "Diabetic retinopathy screening prototype: quality gate, DR grading, Grad-CAM and risk triage."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 # Direct dependencies only, with compatible ranges. Exact pins for every
 # transitive package live in requirements.txt / requirements-dev.txt,
 # regenerated with `make lock`.
 dependencies = [
+    "kagglehub>=1.0,<2",
+    "matplotlib>=3.11,<4",
+    "numpy>=2.5,<3",
+    "opencv-python-headless>=5.0,<6",
+    "pandas>=3.0,<4",
     "pydantic>=2.13,<3",
     "pyyaml>=6.0,<7",
+    "requests>=2.34,<3",
+    "scikit-learn>=1.9,<2",
 ]
 
 [project.optional-dependencies]
 dev = [
+    "import-linter>=2.15,<3",
     "mypy>=2.3,<3",
+    "pandas-stubs>=3.0",
     "pip-tools>=7.6,<8",
     "pre-commit>=4.6,<5",
     "pytest>=9.1,<10",
     "ruff>=0.16,<0.17",
     "types-PyYAML>=6.0",
+    "types-requests>=2.33",
 ]
 
 [tool.setuptools.packages.find]
@@ -31,7 +41,7 @@ where = ["src"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 src = ["src", "tests", "scripts"]
 
 [tool.ruff.lint]
@@ -65,11 +75,17 @@ ban-relative-imports = "all"
 "scripts/**" = ["T20"]         # CLI entry points may print
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
-files = ["src", "tests"]
+files = ["src", "tests", "scripts"]
+
+[[tool.mypy.overrides]]
+# These packages ship without type information.
+module = ["kagglehub.*", "sklearn.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
+

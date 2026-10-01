@@ -6,12 +6,82 @@
 #
 annotated-types==0.8.0
     # via pydantic
+certifi==2026.7.22
+    # via requests
+charset-normalizer==3.5.2
+    # via requests
+cloudpickle==3.1.2
+    # via joblib
+contourpy==1.4.0
+    # via matplotlib
+cycler==0.12.1
+    # via matplotlib
+fonttools==4.66.1
+    # via matplotlib
+idna==3.20
+    # via requests
+joblib==1.6.0
+    # via scikit-learn
+kagglehub==1.0.2
+    # via drscreen (pyproject.toml)
+kagglesdk==0.1.37
+    # via kagglehub
+kiwisolver==1.5.1
+    # via matplotlib
+matplotlib==3.11.2
+    # via drscreen (pyproject.toml)
+narwhals==2.26.0
+    # via scikit-learn
+numpy==2.5.3
+    # via
+    #   contourpy
+    #   drscreen (pyproject.toml)
+    #   matplotlib
+    #   opencv-python-headless
+    #   pandas
+    #   scikit-learn
+    #   scipy
+opencv-python-headless==5.0.0.93
+    # via drscreen (pyproject.toml)
+packaging==26.3
+    # via
+    #   kagglehub
+    #   matplotlib
+pandas==3.0.6
+    # via drscreen (pyproject.toml)
+pillow==12.3.0
+    # via matplotlib
+protobuf==7.36.2
+    # via kagglesdk
 pydantic==2.13.5
     # via drscreen (pyproject.toml)
 pydantic-core==2.46.5
     # via pydantic
+pyparsing==3.3.3
+    # via matplotlib
+python-dateutil==2.9.0.post0
+    # via
+    #   matplotlib
+    #   pandas
 pyyaml==6.0.3
+    # via
+    #   drscreen (pyproject.toml)
+    #   kagglehub
+requests==2.34.2
+    # via
+    #   drscreen (pyproject.toml)
+    #   kagglehub
+    #   kagglesdk
+scikit-learn==1.9.1
     # via drscreen (pyproject.toml)
+scipy==1.18.1
+    # via scikit-learn
+six==1.17.0
+    # via python-dateutil
+threadpoolctl==3.7.0
+    # via scikit-learn
+tqdm==4.70.1
+    # via kagglehub
 typing-extensions==4.16.0
     # via
     #   pydantic
@@ -19,3 +89,5 @@ typing-extensions==4.16.0
     #   typing-inspection
 typing-inspection==0.4.4
     # via pydantic
+urllib3==2.8.0
+    # via requests
