@@ -15,7 +15,7 @@ screening-priority tier.
 | Stage | State |
 |---|---|
 | 1. Scaffold: tooling, config, logging | done |
-| 2. Data pipeline | planned |
+| 2. Data pipeline | done |
 | 3. Grading model | planned |
 | 4. Quality model | planned |
 | 5. Grad-CAM | planned |
@@ -61,9 +61,16 @@ Training and serving share only `data.preprocessing` and `models.factory`.
 ## Key decisions
 
 - **Ben Graham preprocessing** subtracts a blurred copy of the image, which
-  evens out lighting differences between cameras. The grading model sees
-  normalised images. The quality model sees raw crops, because normalisation
-  would hide the lighting and blur problems it exists to detect.
+  evens out lighting differences between cameras. The original method leaves
+  bright and dark halos where the retina meets the black border, and their
+  shape differs by camera, which would let a model tell datasets apart by
+  their borders. Our variant averages over retina pixels only, so the border
+  leaves no halo. The grading model sees normalised images. The quality model
+  sees raw crops, because normalisation would hide the lighting and blur
+  problems it exists to detect.
+- **Patient-grouped splits.** EyePACS images come in left/right pairs from the
+  same patient; both eyes always go to the same split so validation never sees
+  a patient the model trained on.
 - **Class imbalance.** About half of APTOS is grade 0. Cross-entropy is
   weighted by inverse class frequency, computed on the training split only.
 - **QWK, not accuracy.** Grades are ordinal: calling a grade 4 a grade 0 is far
@@ -76,7 +83,7 @@ Training and serving share only `data.preprocessing` and `models.factory`.
 
 ## Setup
 
-Requires Python 3.11 or newer.
+Requires Python 3.12 or newer (Kaggle notebooks run 3.13).
 
 ```bash
 git clone <repo> && cd dr-screening
@@ -88,21 +95,40 @@ ranges; `requirements.txt` (runtime) and `requirements-dev.txt` (runtime plus
 tooling) pin every package exactly. After changing `pyproject.toml`, run
 `make lock` and commit the regenerated files.
 
-Downloading data needs a Kaggle API token at `~/.kaggle/kaggle.json` and
-acceptance of the APTOS 2019 competition rules on kaggle.com.
+### Data sources
+
+| Dataset | Use | Source | Size |
+|---|---|---|---|
+| APTOS 2019 | Grading: train and validation | Kaggle competition `aptos2019-blindness-detection` | ~9.5 GB |
+| IDRiD | Grading: external test only | Kaggle mirror of the official CC BY 4.0 release, pinned version | ~0.4 GB |
+| EyeQ | Quality: train and validation | Labels from the EyeQ GitHub repo, EyePACS images from a pinned Kaggle mirror | ~7.8 GB |
+
+APTOS needs a Kaggle API token at `~/.kaggle/kaggle.json` and acceptance of
+the competition rules on kaggle.com. EyeQ's images are large; on a local
+machine you can skip them with `--override sources.eyeq.enabled=false` and
+train the quality model on Kaggle, where the dataset is attached rather than
+downloaded. Datasets are subject to their own licences and are never
+redistributed by this repository.
 
 ## Running each stage
 
 | Stage | Command | Where |
 |---|---|---|
-| Fetch and normalise datasets | `make fetch-data` | local or Kaggle |
-| Preprocess to 512x512 cache | `make prepare-data` | local or Kaggle |
-| Class balance and sample grids | `make inspect` | local |
+| Download datasets, write manifests with splits | `make fetch-data` | local or Kaggle |
+| Preprocess into the image cache | `make prepare-data` | local or Kaggle |
+| Class balance and sample grids (raw and preprocessed) | `make inspect` | local |
 | Train grading model | `make train-grading` | Kaggle GPU via `notebooks/kaggle_training.ipynb` |
 | Train quality model | `make train-quality` | Kaggle GPU (EyePACS images are attached there, not downloaded) |
 | Train both | `make train` | |
 | External validation on IDRiD | `make evaluate` | local CPU |
 | Web app | `make serve` | local CPU |
+
+Data stages write to `data/`: `manifests/` (one CSV per dataset),
+`processed/<dataset>/` (cached images, their manifest, a `failures.csv` of
+images that could not be preprocessed, and the recipe that produced them) and
+`reports/`. Re-running `make prepare-data` resumes; changing the
+preprocessing recipe requires deleting the old cache, which the script tells
+you.
 
 Every script takes `--config <yaml>`, any number of `--override key=value`
 (for example `--override train.epochs=5`) and `--log-level`. Training runs
@@ -113,7 +139,7 @@ config), `metrics.jsonl` (one line per epoch), `best.pt` and `last.pt`.
 
 ```bash
 make test      # pytest: unit and integration, no datasets or network needed
-make lint      # ruff lint, ruff format check, mypy --strict
+make lint      # ruff lint, ruff format check, mypy --strict, import contracts
 make format    # apply ruff fixes and formatting
 ```
 

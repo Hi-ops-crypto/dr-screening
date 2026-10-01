@@ -9,6 +9,7 @@ itself, and the deployed web app pulls in as little as possible.
 | Module | Responsibility | May import |
 |---|---|---|
 | `config`, `exceptions`, `logging_setup` | Typed YAML loading, error hierarchy, logging setup | nothing internal except `exceptions` |
+| `cli` | Shared argument parsing and error handling for `scripts/` | `logging_setup`, `exceptions` |
 | `data` | Dataset fetching, manifest schema, preprocessing, augmentation, torch `Dataset` | `config`, `exceptions` |
 | `models` | Build a classifier from a backbone name | `config`, `exceptions` |
 | `evaluation` | Metrics and evaluation reports | `config`, `exceptions` |
@@ -19,6 +20,13 @@ itself, and the deployed web app pulls in as little as possible.
 | `app` | Gradio UI and audit log | `inference`, `risk` |
 
 ## Why the boundaries are drawn here
+
+**Inside `data`, preprocessing is pure.** `data.preprocessing` works on
+arrays only: no file I/O, no pandas, no dataset knowledge. `data.image_io`
+does reading and writing, `data.sources` knows each dataset's layout,
+`data.fetch` downloads, and `data.prepare` runs preprocessing over a whole
+manifest. Inference imports only `preprocessing` (and `image_io`), so the
+deployed app never carries dataset or download code.
 
 **Data does not know about models.** Preprocessing turns a raw photograph into
 a normalised array and nothing else. That makes it pure and unit-testable
@@ -58,6 +66,11 @@ model built from `config.StrictModel`. Unknown keys are rejected, so a typo or
 an orphaned key is an error, not a silently ignored setting. Overrides from the
 command line can only change keys that already exist in the file, so the file
 is always the complete list of what a run can be configured with.
+
+## Enforcement
+
+The import rules above are checked by `import-linter` as part of `make lint`;
+contracts live in `pyproject.toml` and are added as each module is built.
 
 ## Errors
 
