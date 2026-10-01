@@ -89,3 +89,14 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 
+# Module boundaries from ARCHITECTURE.md, enforced by `make lint`.
+# Contracts are added as the modules they constrain are built.
+[tool.importlinter]
+root_package = "drscreen"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Preprocessing is pure array code shared by training and serving"
+type = "forbidden"
+source_modules = ["drscreen.data.preprocessing"]
+forbidden_modules = ["torch", "pandas", "drscreen.data.fetch", "drscreen.data.sources"]

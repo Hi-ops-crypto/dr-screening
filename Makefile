@@ -1,8 +1,9 @@
 PYTHON ?= python3
 VENV := .venv
 BIN := $(VENV)/bin
+DATA_CONFIG ?= configs/data.yaml
 
-.PHONY: install lock lint format test
+.PHONY: install lock lint format test fetch-data prepare-data inspect
 
 $(BIN)/python:
 	$(PYTHON) -m venv $(VENV)
@@ -23,6 +24,7 @@ lint:
 	$(BIN)/ruff check .
 	$(BIN)/ruff format --check .
 	$(BIN)/mypy
+	$(BIN)/lint-imports
 
 format:
 	$(BIN)/ruff check --fix .
@@ -30,3 +32,12 @@ format:
 
 test:
 	$(BIN)/pytest
+
+fetch-data:
+	$(BIN)/python scripts/fetch_data.py --config $(DATA_CONFIG)
+
+prepare-data:
+	$(BIN)/python scripts/prepare_data.py --config $(DATA_CONFIG)
+
+inspect:
+	$(BIN)/python scripts/inspect_data.py --config $(DATA_CONFIG)
