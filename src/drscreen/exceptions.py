@@ -13,3 +13,11 @@ class DrScreenError(Exception):
 
 class ConfigError(DrScreenError):
     """A configuration file is missing, malformed or fails validation."""
+
+
+class DataError(DrScreenError):
+    """A dataset, manifest or image file is missing, unreadable or malformed."""
+
+
+class FundusNotFoundError(DataError):
+    """An image does not contain a detectable circular fundus region."""
