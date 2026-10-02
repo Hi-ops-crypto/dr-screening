@@ -93,3 +93,40 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 
+# Module boundaries from ARCHITECTURE.md, enforced by `make lint`.
+# Contracts are added as the modules they constrain are built.
+[tool.importlinter]
+root_package = "drscreen"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Preprocessing is pure array code shared by training and serving"
+type = "forbidden"
+source_modules = ["drscreen.data.preprocessing"]
+forbidden_modules = ["torch", "pandas", "drscreen.data.fetch", "drscreen.data.sources"]
+
+[[tool.importlinter.contracts]]
+name = "Data pipeline does not depend on models, training or evaluation"
+type = "forbidden"
+source_modules = ["drscreen.data"]
+forbidden_modules = ["drscreen.models", "drscreen.training", "drscreen.evaluation"]
+
+[[tool.importlinter.contracts]]
+name = "Models depend only on preprocessing and tensor conversion from the data package"
+type = "forbidden"
+source_modules = ["drscreen.models"]
+forbidden_modules = [
+    "drscreen.training",
+    "drscreen.evaluation",
+    "drscreen.data.augmentation",
+    "drscreen.data.dataset",
+    "drscreen.data.fetch",
+    "drscreen.data.prepare",
+    "drscreen.data.sources",
+]
+
+[[tool.importlinter.contracts]]
+name = "Evaluation does not depend on training"
+type = "forbidden"
+source_modules = ["drscreen.evaluation"]
+forbidden_modules = ["drscreen.training"]

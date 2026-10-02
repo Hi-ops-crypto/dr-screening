@@ -2,8 +2,10 @@ PYTHON ?= python3
 VENV := .venv
 BIN := $(VENV)/bin
 DATA_CONFIG ?= configs/data.yaml
+GRADING_CONFIG ?= configs/train_grading.yaml
+EVAL_CONFIG ?= configs/evaluate.yaml
 
-.PHONY: install lock lint format test fetch-data prepare-data inspect
+.PHONY: install lock lint format test fetch-data prepare-data inspect train train-grading evaluate
 
 $(BIN)/python:
 	$(PYTHON) -m venv $(VENV)
@@ -41,3 +43,12 @@ prepare-data:
 
 inspect:
 	$(BIN)/python scripts/inspect_data.py --config $(DATA_CONFIG)
+
+train: train-grading
+
+train-grading:
+	$(BIN)/python scripts/train.py --config $(GRADING_CONFIG)
+
+evaluate:
+	@test -n "$(CHECKPOINT)" || { echo "Usage: make evaluate CHECKPOINT=runs/<run>/best.pt"; exit 1; }
+	$(BIN)/python scripts/evaluate.py --config $(EVAL_CONFIG) --checkpoint $(CHECKPOINT)
