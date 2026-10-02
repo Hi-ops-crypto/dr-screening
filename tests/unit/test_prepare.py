@@ -7,7 +7,7 @@ import pytest
 
 from drscreen.data.image_io import read_rgb, write_rgb
 from drscreen.data.prepare import ERROR_COLUMN, prepare_images
-from drscreen.data.preprocessing import PreprocessingConfig
+from drscreen.data.preprocessing import BenGrahamConfig, PreprocessingConfig
 from drscreen.data.schema import GRADE, GROUP, IMAGE_ID, IMAGE_PATH, SOURCE
 from drscreen.exceptions import DataError
 
@@ -57,6 +57,27 @@ def test_rerun_with_same_recipe_resumes(
 
     assert second.manifest.equals(first.manifest)
     assert second.failures.empty
+
+
+def test_lighting_settings_do_not_invalidate_cache(
+    tmp_path: Path, write_fundus: Callable[[Path], Path]
+) -> None:
+    manifest = _manifest([write_fundus(tmp_path / "a.png")])
+    prepare_images(manifest, tmp_path / "out", CONFIG, workers=1)
+    with_lighting = CONFIG.model_copy(
+        update={
+            "ben_graham": BenGrahamConfig(
+                sigma_radius_fraction=0.03,
+                contrast_gain=4.0,
+                brightness_offset=128,
+                edge_erosion_fraction=0.03,
+            )
+        }
+    )
+
+    result = prepare_images(manifest, tmp_path / "out", with_lighting, workers=1)
+
+    assert result.failures.empty
 
 
 def test_rerun_with_different_recipe_is_rejected(

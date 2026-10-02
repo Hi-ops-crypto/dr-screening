@@ -5,7 +5,9 @@ from drscreen.data.preprocessing import (
     BenGrahamConfig,
     PreprocessingConfig,
     ben_graham_normalise,
+    crop_and_resize,
     crop_to_fundus,
+    normalise_lighting,
     pad_to_square,
     preprocess,
     resize_square,
@@ -143,3 +145,18 @@ def test_preprocess_is_deterministic(make_fundus: FundusFactory) -> None:
     np.testing.assert_array_equal(
         preprocess(image, _config(BEN_GRAHAM)), preprocess(image, _config(BEN_GRAHAM))
     )
+
+
+def test_preprocess_equals_lighting_after_geometry(make_fundus: FundusFactory) -> None:
+    image = make_fundus()
+    config = _config(BEN_GRAHAM)
+
+    np.testing.assert_array_equal(
+        preprocess(image, config), normalise_lighting(crop_and_resize(image, config), config)
+    )
+
+
+def test_normalise_lighting_is_identity_without_ben_graham(make_fundus: FundusFactory) -> None:
+    image = make_fundus()
+
+    assert normalise_lighting(image, _config(None)) is image

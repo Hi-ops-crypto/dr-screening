@@ -1,11 +1,13 @@
-"""Batch preprocessing of a manifest's images into an on-disk cache.
+"""Batch cropping and resizing of a manifest's images into an on-disk cache.
 
-Preprocessing the multi-megapixel originals takes far longer than a training
-step, so it runs once per dataset and training reads the small cached images.
+Decoding and cropping the multi-megapixel originals takes far longer than a
+training step, so it runs once per dataset and training reads the small cached
+images. Only the geometric steps are cached; lighting normalisation runs when
+an image is loaded, after any augmentation (see ``drscreen.data.dataset``).
 
-Each cache directory records the recipe that produced it. Re-running with the
-same recipe resumes where it stopped; running with a different recipe fails
-instead of mixing images made with different settings.
+Each cache directory records the geometric recipe that produced it. Re-running
+with the same recipe resumes where it stopped; running with a different recipe
+fails instead of mixing images made with different settings.
 """
 
 import json
@@ -19,13 +21,15 @@ from pathlib import Path
 import pandas as pd
 
 from drscreen.data.image_io import read_rgb, write_rgb
-from drscreen.data.preprocessing import PreprocessingConfig, preprocess
+from drscreen.data.preprocessing import PreprocessingConfig, crop_and_resize
 from drscreen.data.schema import IMAGE_ID, IMAGE_PATH
 from drscreen.exceptions import DataError
 
 logger = logging.getLogger(__name__)
 
 RECIPE_FILE = "preprocessing.json"
+# Lighting normalisation is applied at load time, so it is not part of the cache.
+UNCACHED_FIELDS = {"ben_graham"}
 IMAGES_SUBDIR = "images"
 PROCESSED_SUFFIX = ".png"  # lossless, so the cache adds no compression artefacts
 ERROR_COLUMN = "error"
@@ -49,7 +53,7 @@ class PrepareResult:
 def prepare_images(
     manifest: pd.DataFrame, output_dir: Path, config: PreprocessingConfig, workers: int
 ) -> PrepareResult:
-    """Preprocess every image in a manifest and write the results to disk.
+    """Crop and resize every image in a manifest and write the results to disk.
 
     Images whose preprocessing raises ``DataError`` (unreadable files, no
     detectable fundus) are reported in ``PrepareResult.failures`` rather than
@@ -126,10 +130,41 @@ def _process_one(source: Path, target: Path, config: PreprocessingConfig) -> str
     if target.is_file():
         return None
     try:
-        write_rgb(preprocess(read_rgb(source), config), target)
+        write_rgb(crop_and_resize(read_rgb(source), config), target)
     except DataError as exc:
         return str(exc)
     return None
+
+
+def cached_recipe(config: PreprocessingConfig) -> dict[str, object]:
+    """Return the part of a recipe that determines cached images.
+
+    Args:
+        config: Full preprocessing recipe.
+
+    Returns:
+        JSON-compatible mapping of the geometric recipe fields.
+    """
+    return config.model_dump(mode="json", exclude=UNCACHED_FIELDS)
+
+
+def read_cached_recipe(cache_dir: Path) -> dict[str, object]:
+    """Read the recipe stored in a cache directory.
+
+    Args:
+        cache_dir: Directory written by ``prepare_images``.
+
+    Returns:
+        The stored geometric recipe.
+
+    Raises:
+        DataError: If the directory has no recipe file.
+    """
+    recipe_path = cache_dir / RECIPE_FILE
+    if not recipe_path.is_file():
+        raise DataError(f"No {RECIPE_FILE} in {cache_dir}; run `make prepare-data` first.")
+    stored: dict[str, object] = json.loads(recipe_path.read_text(encoding="utf-8"))
+    return stored
 
 
 def _claim_cache_dir(output_dir: Path, config: PreprocessingConfig) -> None:
@@ -143,9 +178,9 @@ def _claim_cache_dir(output_dir: Path, config: PreprocessingConfig) -> None:
         DataError: If the directory was produced with a different recipe.
     """
     recipe_path = output_dir / RECIPE_FILE
-    recipe = config.model_dump(mode="json")
+    recipe = cached_recipe(config)
     if recipe_path.is_file():
-        stored = json.loads(recipe_path.read_text(encoding="utf-8"))
+        stored = read_cached_recipe(output_dir)
         if stored != recipe:
             raise DataError(
                 f"{output_dir} was produced with a different preprocessing recipe "

@@ -1,12 +1,14 @@
 """Report class distributions and render per-class sample grids for each dataset.
 
 Grids are rendered for both raw and preprocessed images (when available), so
-cropping and normalisation can be checked by eye.
+cropping and normalisation can be checked by eye. Preprocessed grids show the
+cached crops after lighting normalisation, as the model sees them.
 """
 
 import argparse
 import logging
 import sys
+from functools import partial
 from pathlib import Path
 
 import pandas as pd
@@ -14,6 +16,7 @@ import pandas as pd
 from drscreen.cli import build_parser, run
 from drscreen.config import load_config
 from drscreen.data.inspection import class_distribution, render_sample_grid
+from drscreen.data.preprocessing import normalise_lighting
 from drscreen.data.schema import CLASS_NAMES, LABEL_COLUMN, Source
 from drscreen.data.settings import DataConfig
 from drscreen.exceptions import DataError
@@ -41,11 +44,12 @@ def main(args: argparse.Namespace) -> None:
             continue
         label_column = LABEL_COLUMN[source]
         names = CLASS_NAMES[label_column]
+        lighting = partial(normalise_lighting, config=config.preprocessing.for_source(source))
         stages = {
-            "raw": config.paths.manifest(source),
-            "processed": config.paths.processed_manifest(source),
+            "raw": (config.paths.manifest(source), None),
+            "processed": (config.paths.processed_manifest(source), lighting),
         }
-        for stage, manifest_path in stages.items():
+        for stage, (manifest_path, transform) in stages.items():
             if not manifest_path.is_file():
                 logger.info("No %s manifest for %s; skipping", stage, source.value)
                 continue
@@ -60,6 +64,7 @@ def main(args: argparse.Namespace) -> None:
                 samples_per_class=config.inspection.samples_per_class,
                 thumbnail_size=config.inspection.thumbnail_size,
                 seed=config.inspection.seed,
+                transform=transform,
             )
             grid.savefig(reports_dir / f"{source.value}_{stage}_samples.png")
             inspected += 1

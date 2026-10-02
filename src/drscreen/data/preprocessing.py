@@ -196,8 +196,12 @@ def ben_graham_normalise(
     return np.clip(np.rint(normalised), 0, UINT8_MAX).astype(np.uint8)
 
 
-def preprocess(image: Image, config: PreprocessingConfig) -> Image:
-    """Run the full preprocessing recipe on a raw fundus photograph.
+def crop_and_resize(image: Image, config: PreprocessingConfig) -> Image:
+    """Run the geometric part of the recipe: crop, pad to square and resize.
+
+    Training caches this output and applies augmentation to it before
+    ``normalise_lighting``, so simulated camera degradation passes through
+    the same normalisation a real degraded photograph would.
 
     Args:
         image: Raw RGB uint8 photograph.
@@ -210,7 +214,36 @@ def preprocess(image: Image, config: PreprocessingConfig) -> Image:
         FundusNotFoundError: If no fundus region can be located.
     """
     cropped = crop_to_fundus(image, config.fundus_intensity_threshold, config.min_fundus_fraction)
-    resized = resize_square(pad_to_square(cropped), config.image_size)
+    return resize_square(pad_to_square(cropped), config.image_size)
+
+
+def normalise_lighting(image: Image, config: PreprocessingConfig) -> Image:
+    """Run the photometric part of the recipe on a cropped, resized image.
+
+    Args:
+        image: Output of ``crop_and_resize``, possibly augmented.
+        config: The recipe to apply.
+
+    Returns:
+        The Ben Graham normalised image, or ``image`` unchanged when the
+        recipe has no lighting normalisation.
+    """
     if config.ben_graham is None:
-        return resized
-    return ben_graham_normalise(resized, config.ben_graham, config.fundus_intensity_threshold)
+        return image
+    return ben_graham_normalise(image, config.ben_graham, config.fundus_intensity_threshold)
+
+
+def preprocess(image: Image, config: PreprocessingConfig) -> Image:
+    """Run the full recipe on a raw fundus photograph.
+
+    Args:
+        image: Raw RGB uint8 photograph.
+        config: The recipe to apply.
+
+    Returns:
+        A ``config.image_size`` square RGB uint8 image ready for the model.
+
+    Raises:
+        FundusNotFoundError: If no fundus region can be located.
+    """
+    return normalise_lighting(crop_and_resize(image, config), config)

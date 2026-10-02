@@ -4,7 +4,7 @@ These reports are for a human to check that labels, splits and preprocessing
 look right before any model is trained.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import cv2
@@ -13,6 +13,7 @@ import pandas as pd
 from matplotlib.figure import Figure
 
 from drscreen.data.image_io import read_rgb
+from drscreen.data.preprocessing import Image
 from drscreen.data.schema import IMAGE_PATH, SPLIT
 
 TOTAL_LABEL = "total"
@@ -54,6 +55,7 @@ def render_sample_grid(
     samples_per_class: int,
     thumbnail_size: int,
     seed: int,
+    transform: Callable[[Image], Image] | None = None,
 ) -> Figure:
     """Render a grid with one row of randomly sampled images per class.
 
@@ -64,6 +66,8 @@ def render_sample_grid(
         samples_per_class: Number of images per row.
         thumbnail_size: Side length each image is resized to, in pixels.
         seed: Seed for choosing which images are shown.
+        transform: Optional function applied to each image before display,
+            such as lighting normalisation of cached images.
 
     Returns:
         A matplotlib figure; classes with fewer images leave blank cells.
@@ -83,6 +87,8 @@ def render_sample_grid(
             axis.set_axis_off()
             if column < len(chosen):
                 image = read_rgb(Path(chosen[column]))
+                if transform is not None:
+                    image = transform(image)
                 thumbnail = cv2.resize(
                     image, (thumbnail_size, thumbnail_size), interpolation=cv2.INTER_AREA
                 )
