@@ -16,7 +16,7 @@ screening-priority tier.
 |---|---|
 | 1. Scaffold: tooling, config, logging | done |
 | 2. Data pipeline | done |
-| 3. Grading model | planned |
+| 3. Grading model | done (code; first Kaggle run pending) |
 | 4. Quality model | planned |
 | 5. Grad-CAM | planned |
 | 6. Inference | planned |
@@ -71,15 +71,31 @@ Training and serving share only `data.preprocessing` and `models.factory`.
 - **Patient-grouped splits.** EyePACS images come in left/right pairs from the
   same patient; both eyes always go to the same split so validation never sees
   a patient the model trained on.
+- **Augment before normalising.** The cache stores cropped, resized images.
+  Phone-camera augmentation (framing, rotation, exposure, white balance, blur,
+  vignetting) is applied to them before lighting normalisation, exactly where
+  a real phone's degradation would enter the pipeline.
 - **Class imbalance.** About half of APTOS is grade 0. Cross-entropy is
   weighted by inverse class frequency, computed on the training split only.
+  Weighted loss was chosen over weighted sampling because it keeps every
+  image in every epoch instead of repeating the few severe cases.
 - **QWK, not accuracy.** Grades are ordinal: calling a grade 4 a grade 0 is far
   worse than calling it a 3, and quadratic weighted kappa penalises errors by
-  distance. Per-class sensitivity matters most for grades 2 to 4, where a miss
-  is a missed referral.
+  distance. The best checkpoint is chosen by validation QWK. Reports also give
+  per-grade sensitivity and specificity and, because a screening programme
+  acts on "refer or not", sensitivity and specificity for referable DR
+  (moderate or worse).
 - **IDRiD as external validation.** It comes from a different clinic, camera
   and population, and is never used for training or model selection, so it
-  measures how the model generalises.
+  measures how the model generalises. The training config refuses IDRiD as a
+  source. External metrics carry 95% bootstrap confidence intervals because
+  the set is small.
+- **Checkpoints are self-describing.** Each stores the backbone, class names,
+  preprocessing recipe and input statistics, so evaluation and the app feed
+  the model exactly what it was trained on, whatever the current configs say.
+- **Swappable backbone.** `model.backbone` takes any timm model name and
+  `model.weights_path` a local weights file, so RETFound can be tried by editing
+  `configs/train_grading.yaml` alone.
 
 ## Setup
 
@@ -120,7 +136,7 @@ redistributed by this repository.
 | Train grading model | `make train-grading` | Kaggle GPU via `notebooks/kaggle_training.ipynb` |
 | Train quality model | `make train-quality` | Kaggle GPU (EyePACS images are attached there, not downloaded) |
 | Train both | `make train` | |
-| External validation on IDRiD | `make evaluate` | local CPU |
+| External validation on IDRiD | `make evaluate CHECKPOINT=runs/<run>/best.pt` | local CPU |
 | Web app | `make serve` | local CPU |
 
 Data stages write to `data/`: `manifests/` (one CSV per dataset),
@@ -131,9 +147,24 @@ preprocessing recipe requires deleting the old cache, which the script tells
 you.
 
 Every script takes `--config <yaml>`, any number of `--override key=value`
-(for example `--override train.epochs=5`) and `--log-level`. Training runs
-write `runs/<timestamp>/` containing `run.json` (seed, git SHA, resolved
-config), `metrics.jsonl` (one line per epoch), `best.pt` and `last.pt`.
+(for example `--override optimisation.epochs=5`) and `--log-level`. Training
+runs write `runs/<source>-<UTC timestamp>/` containing `run.json` (seed, git
+commit and whether the tree had local changes, torch version, device, class
+weights, resolved config), `metrics.jsonl` (one line per epoch), `best.pt`
+(highest validation QWK) and `last.pt`. Evaluation writes
+`eval-<dataset>/metrics.json` and `confusion_matrix.png` next to the
+checkpoint it scored.
+
+### Training on Kaggle
+
+1. Push this repository to GitHub (public, or private with a Kaggle secret
+   holding a token).
+2. Create a Kaggle notebook from `notebooks/kaggle_training.ipynb`, attach the
+   inputs listed in its first cell, enable the GPU and internet, and set
+   `REPO_URL`.
+3. *Run all*. Fetching, preprocessing, training (about 20 epochs, under an
+   hour on a T4) and IDRiD evaluation run in order. *Save Version* keeps the
+   `runs/` output, from which `best.pt` can be downloaded.
 
 ## Tests and quality checks
 
@@ -157,7 +188,10 @@ startup at a pinned revision and are never committed to git.
 - Trained on clinic fundus-camera images. Phone-camera degradation
   augmentation is an approximation, not validation on phone captures.
 - IDRiD has 516 images from one centre, so per-class metrics for grades 3 and
-  4 rest on few examples.
+  4 rest on few examples; the confidence intervals show how wide they are.
+- Swapping in RETFound is a config change for the architecture, but its
+  published checkpoint may need its keys mapped to timm's layout first; this
+  has not yet been tried.
 - APTOS has known label noise and near-duplicate images, which can inflate
   internal validation scores. Treat IDRiD results as the honest estimate.
 - Displayed confidence is a softmax probability, not a calibrated likelihood.

@@ -10,10 +10,11 @@ itself, and the deployed web app pulls in as little as possible.
 |---|---|---|
 | `config`, `exceptions`, `logging_setup` | Typed YAML loading, error hierarchy, logging setup | nothing internal except `exceptions` |
 | `cli` | Shared argument parsing and error handling for `scripts/` | `logging_setup`, `exceptions` |
+| `devices`, `reproducibility` | Device selection; seeding and git provenance | `exceptions` |
 | `data` | Dataset fetching, manifest schema, preprocessing, augmentation, torch `Dataset` | `config`, `exceptions` |
-| `models` | Build a classifier from a backbone name | `config`, `exceptions` |
-| `evaluation` | Metrics and evaluation reports | `config`, `exceptions` |
-| `training` | Training loop, class weighting, checkpoints, run logs | `data`, `models`, `evaluation` |
+| `models` | Build a classifier from a backbone name; save and load self-describing checkpoints | `data.preprocessing`, `data.tensors` |
+| `evaluation` | Metrics, batch prediction, reports, external evaluation of a checkpoint | `data`, `models`, `devices` |
+| `training` | Training loop, class weighting, run logs | `data`, `models`, `evaluation`, `reproducibility` |
 | `explain` | Grad-CAM over any convolutional classifier | nothing internal |
 | `inference` | Validate input, quality gate, grade, referral guidance | `data.preprocessing`, `models`, `explain` |
 | `risk` | Screening-priority tier from clinical factors | `config`, `exceptions` |
@@ -45,6 +46,12 @@ such as augmentation.
 (on the APTOS validation split) and afterwards on the external IDRiD set.
 Putting them in their own module means the external evaluation does not need
 the training loop.
+
+**Checkpoints carry their own preprocessing.** `models.checkpoint` stores the
+recipe and input statistics with the weights. Anything that loads a model
+takes them from there, so a later edit to `configs/data.yaml` cannot silently
+change what an existing model is fed. This is why `models` may import the
+preprocessing schema, and nothing else from `data`.
 
 **Explainability is standalone.** Grad-CAM takes a model, a target layer and an
 input tensor. It knows nothing about DR, so it can be used from a notebook, the
