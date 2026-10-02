@@ -76,6 +76,7 @@ ban-relative-imports = "all"
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D", "PLR2004"]  # test names document intent; literals are expected values
 "scripts/**" = ["T20"]         # CLI entry points may print
+"notebooks/**" = ["T20"]       # notebooks are interactive entry points
 
 [tool.mypy]
 python_version = "3.12"
