@@ -167,6 +167,24 @@ def read_cached_recipe(cache_dir: Path) -> dict[str, object]:
     return stored
 
 
+def require_cache_matches(cache_dir: Path, config: PreprocessingConfig) -> None:
+    """Check that a cache was produced with the geometric part of a recipe.
+
+    Args:
+        cache_dir: Directory written by ``prepare_images``.
+        config: Recipe a model was, or is about to be, trained with.
+
+    Raises:
+        DataError: If the cache is missing or was made with different settings.
+    """
+    stored = read_cached_recipe(cache_dir)
+    if stored != cached_recipe(config):
+        raise DataError(
+            f"Images in {cache_dir} were cropped with {stored}, but the model expects "
+            f"{cached_recipe(config)}. Re-run `make prepare-data` with matching settings."
+        )
+
+
 def _claim_cache_dir(output_dir: Path, config: PreprocessingConfig) -> None:
     """Record the recipe in a cache directory, or check it matches the stored one.
 

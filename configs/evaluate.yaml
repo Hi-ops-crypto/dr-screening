@@ -1,0 +1,14 @@
+# External evaluation of a trained grading checkpoint.
+# Schema: drscreen.evaluation.external.EvaluationConfig.
+
+data_config: configs/data.yaml
+source: idrid
+batch_size: 16
+num_workers: 4
+device: auto
+# Must match the training config so validation and external results compare.
+referable_min_grade: 2
+bootstrap:
+  resamples: 2000      # percentile intervals are stable to about 0.01 at this count
+  confidence: 0.95
+  seed: 42
