@@ -8,6 +8,10 @@ annotated-types==0.8.0
     # via
     #   -c requirements.txt
     #   pydantic
+anyio==4.15.1
+    # via
+    #   -c requirements.txt
+    #   httpx2
 ast-serialize==0.11.2
     # via mypy
 build==1.6.1
@@ -24,6 +28,8 @@ charset-normalizer==3.5.2
     #   requests
 click==8.5.0
     # via
+    #   -c requirements.txt
+    #   huggingface-hub
     #   import-linter
     #   pip-tools
 cloudpickle==3.1.2
@@ -40,26 +46,60 @@ cycler==0.12.1
     #   matplotlib
 distlib==0.4.3
     # via virtualenv
-filelock==4.0.8
+filelock==4.0.9
     # via
+    #   -c requirements.txt
+    #   huggingface-hub
     #   python-discovery
+    #   torch
     #   virtualenv
 fonttools==4.66.1
     # via
     #   -c requirements.txt
     #   matplotlib
+fsspec==2026.9.0
+    # via
+    #   -c requirements.txt
+    #   huggingface-hub
+    #   torch
 grimp==3.17
     # via import-linter
+h11==0.16.0
+    # via
+    #   -c requirements.txt
+    #   httpcore2
+hf-xet==1.6.0
+    # via
+    #   -c requirements.txt
+    #   huggingface-hub
+httpcore2==2.13.1
+    # via
+    #   -c requirements.txt
+    #   httpx2
+httpx2==2.13.1
+    # via
+    #   -c requirements.txt
+    #   huggingface-hub
+huggingface-hub==2.1.1
+    # via
+    #   -c requirements.txt
+    #   timm
 identify==2.6.20
     # via pre-commit
 idna==3.20
     # via
     #   -c requirements.txt
+    #   anyio
+    #   httpx2
     #   requests
 import-linter==2.15
     # via drscreen (pyproject.toml)
 iniconfig==2.3.0
     # via pytest
+jinja2==3.1.6
+    # via
+    #   -c requirements.txt
+    #   torch
 joblib==1.6.0
     # via
     #   -c requirements.txt
@@ -80,12 +120,20 @@ librt==0.16.0
     # via mypy
 markdown-it-py==4.2.0
     # via rich
+markupsafe==3.0.3
+    # via
+    #   -c requirements.txt
+    #   jinja2
 matplotlib==3.11.2
     # via
     #   -c requirements.txt
     #   drscreen (pyproject.toml)
 mdurl==0.1.2
     # via markdown-it-py
+mpmath==1.3.0
+    # via
+    #   -c requirements.txt
+    #   sympy
 mypy==2.3.1
     # via drscreen (pyproject.toml)
 mypy-extensions==1.1.0
@@ -94,6 +142,10 @@ narwhals==2.26.0
     # via
     #   -c requirements.txt
     #   scikit-learn
+networkx==3.7
+    # via
+    #   -c requirements.txt
+    #   torch
 nodeenv==1.11.0
     # via pre-commit
 numpy==2.5.3
@@ -107,6 +159,7 @@ numpy==2.5.3
     #   pandas-stubs
     #   scikit-learn
     #   scipy
+    #   torchvision
 opencv-python-headless==5.0.0.93
     # via
     #   -c requirements.txt
@@ -115,6 +168,7 @@ packaging==26.3
     # via
     #   -c requirements.txt
     #   build
+    #   huggingface-hub
     #   kagglehub
     #   matplotlib
     #   pytest
@@ -132,6 +186,7 @@ pillow==12.3.0
     # via
     #   -c requirements.txt
     #   matplotlib
+    #   torchvision
 pip-tools==7.6.1
     # via drscreen (pyproject.toml)
 platformdirs==4.12.2
@@ -177,8 +232,10 @@ pyyaml==6.0.3
     # via
     #   -c requirements.txt
     #   drscreen (pyproject.toml)
+    #   huggingface-hub
     #   kagglehub
     #   pre-commit
+    #   timm
 requests==2.34.2
     # via
     #   -c requirements.txt
@@ -189,6 +246,10 @@ rich==15.0.0
     # via import-linter
 ruff==0.16.10
     # via drscreen (pyproject.toml)
+safetensors==0.8.0
+    # via
+    #   -c requirements.txt
+    #   timm
 scikit-learn==1.9.1
     # via
     #   -c requirements.txt
@@ -201,14 +262,39 @@ six==1.17.0
     # via
     #   -c requirements.txt
     #   python-dateutil
+sympy==1.14.0
+    # via
+    #   -c requirements.txt
+    #   torch
 threadpoolctl==3.7.0
     # via
     #   -c requirements.txt
     #   scikit-learn
+timm==1.0.30
+    # via
+    #   -c requirements.txt
+    #   drscreen (pyproject.toml)
+torch==2.14.1
+    # via
+    #   -c requirements.txt
+    #   drscreen (pyproject.toml)
+    #   timm
+    #   torchvision
+torchvision==0.29.1
+    # via
+    #   -c requirements.txt
+    #   drscreen (pyproject.toml)
+    #   timm
 tqdm==4.70.1
     # via
     #   -c requirements.txt
+    #   huggingface-hub
     #   kagglehub
+truststore==0.10.4
+    # via
+    #   -c requirements.txt
+    #   httpcore2
+    #   httpx2
 types-pyyaml==6.0.12.20260906
     # via drscreen (pyproject.toml)
 types-requests==2.33.0.20260906
@@ -216,10 +302,14 @@ types-requests==2.33.0.20260906
 typing-extensions==4.16.0
     # via
     #   -c requirements.txt
+    #   anyio
+    #   httpx2
+    #   huggingface-hub
     #   import-linter
     #   mypy
     #   pydantic
     #   pydantic-core
+    #   torch
     #   typing-inspection
 typing-inspection==0.4.4
     # via

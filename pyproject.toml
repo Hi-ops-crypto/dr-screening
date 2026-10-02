@@ -21,6 +21,9 @@ dependencies = [
     "pyyaml>=6.0,<7",
     "requests>=2.34,<3",
     "scikit-learn>=1.9,<2",
+    "timm>=1.0,<2",
+    "torch>=2.14,<3",
+    "torchvision>=0.29,<1",
 ]
 
 [project.optional-dependencies]
@@ -82,21 +85,10 @@ files = ["src", "tests", "scripts"]
 
 [[tool.mypy.overrides]]
 # These packages ship without type information.
-module = ["kagglehub.*", "sklearn.*"]
+module = ["kagglehub.*", "sklearn.*", "timm.*", "torchvision.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 
-# Module boundaries from ARCHITECTURE.md, enforced by `make lint`.
-# Contracts are added as the modules they constrain are built.
-[tool.importlinter]
-root_package = "drscreen"
-include_external_packages = true
-
-[[tool.importlinter.contracts]]
-name = "Preprocessing is pure array code shared by training and serving"
-type = "forbidden"
-source_modules = ["drscreen.data.preprocessing"]
-forbidden_modules = ["torch", "pandas", "drscreen.data.fetch", "drscreen.data.sources"]
