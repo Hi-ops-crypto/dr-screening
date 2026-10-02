@@ -21,3 +21,7 @@ class DataError(DrScreenError):
 
 class FundusNotFoundError(DataError):
     """An image does not contain a detectable circular fundus region."""
+
+
+class ModelError(DrScreenError):
+    """A model cannot be built, or a checkpoint is missing or incompatible."""
