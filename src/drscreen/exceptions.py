@@ -25,3 +25,7 @@ class FundusNotFoundError(DataError):
 
 class ModelError(DrScreenError):
     """A model cannot be built, or a checkpoint is missing or incompatible."""
+
+
+class InputError(DrScreenError):
+    """A user-supplied image or clinical value cannot be used for screening."""
