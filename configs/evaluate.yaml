@@ -6,9 +6,25 @@ source: idrid
 batch_size: 16
 num_workers: 4
 device: auto
+# Also average each image with its mirror image (left and right eyes are mirror
+# images). The web app must use the same setting as the threshold was tuned with.
+flip_tta: false
 # Must match the training config so validation and external results compare.
 referable_min_grade: 2
 bootstrap:
   resamples: 2000      # percentile intervals are stable to about 0.01 at this count
   confidence: 0.95
   seed: 42
+
+# Probability-threshold referral: refer when the predicted grade is referable
+# OR the summed probability of grades >= referable_min_grade reaches a
+# threshold. `make tune-referral` picks the highest threshold that reaches
+# target_sensitivity on the pooled validation splits of tuning_sources (never
+# on the external set above), so the external report stays an honest estimate.
+referral:
+  tuning_sources: [aptos, eyepacs, eyepacs_test, ddr]   # the grading model's training sources
+  # Set above the usual 80% screening goal because internal validation
+  # overestimates: argmax referable sensitivity was 0.88 on APTOS validation
+  # but 0.75 on IDRiD for the first model.
+  target_sensitivity: 0.95
+  threshold: null          # set to the tuned value to report it externally

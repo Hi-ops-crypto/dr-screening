@@ -4,11 +4,14 @@ import pytest
 from drscreen.evaluation.metrics import (
     BootstrapConfig,
     bootstrap_interval,
+    choose_referral_threshold,
     confusion,
     quadratic_weighted_kappa,
     referable_sensitivity_specificity,
+    referral_decisions,
     sensitivity_specificity,
     summarise,
+    threshold_referral_metrics,
 )
 
 NAMES = ("No DR", "Mild NPDR", "Moderate NPDR", "Severe NPDR", "Proliferative DR")
@@ -107,3 +110,54 @@ def test_summarise_without_referral_threshold_omits_referable_metrics() -> None:
     )
 
     assert not any(name.startswith("referable") for name in metrics)
+
+
+def _probabilities(*rows: tuple[float, ...]) -> np.ndarray:
+    return np.array(rows, dtype=np.float64)
+
+
+# Rows: P(grade 0..4). Referable probability (grades 2-4) is 0.1, 0.4, 0.3, 0.9.
+TUNING_PROBABILITIES = _probabilities(
+    (0.6, 0.3, 0.1, 0.0, 0.0),
+    (0.2, 0.4, 0.2, 0.2, 0.0),  # under-graded referable case
+    (0.3, 0.4, 0.3, 0.0, 0.0),  # under-graded referable case
+    (0.0, 0.1, 0.2, 0.3, 0.4),  # correctly referred by its grade
+)
+TUNING_TRUE = _labels(0, 2, 3, 4)
+
+
+def test_referral_rule_refers_by_grade_or_referable_probability() -> None:
+    decisions = referral_decisions(TUNING_PROBABILITIES, min_grade=2, threshold=0.35)
+
+    assert decisions.tolist() == [0, 2, 0, 2]
+
+
+def test_threshold_is_the_highest_that_reaches_the_target() -> None:
+    # 3 referable cases; 1 is referred by grade. 2/3 needs the 0.4 case, 3/3 also the 0.3 case.
+    assert choose_referral_threshold(TUNING_TRUE, TUNING_PROBABILITIES, 2, 0.6) == 0.4
+    assert choose_referral_threshold(TUNING_TRUE, TUNING_PROBABILITIES, 2, 1.0) == 0.3
+
+
+def test_threshold_is_one_when_grades_alone_reach_the_target() -> None:
+    assert choose_referral_threshold(TUNING_TRUE, TUNING_PROBABILITIES, 2, 0.3) == 1.0
+
+
+def test_threshold_needs_referable_cases() -> None:
+    with pytest.raises(ValueError, match="No image of grade 2"):
+        choose_referral_threshold(_labels(0, 1), TUNING_PROBABILITIES[:2], 2, 0.9)
+
+
+def test_threshold_metrics_match_the_rule() -> None:
+    metrics = threshold_referral_metrics(
+        TUNING_TRUE,
+        TUNING_PROBABILITIES,
+        2,
+        0.3,
+        BootstrapConfig(resamples=50, confidence=0.9, seed=0),
+    )
+
+    assert metrics["referable@threshold/threshold"] == 0.3
+    assert metrics["referable@threshold/sensitivity"] == 1.0
+    assert metrics["referable@threshold/specificity"] == 1.0
+    assert metrics["referable@threshold/referred_fraction"] == 0.75
+    assert "referable@threshold/sensitivity/ci_lower" in metrics
