@@ -1,0 +1,46 @@
+# Site adaptation: fine-tune a trained grading checkpoint on a few hundred
+# labelled images from the clinic it will serve, so it learns that site's
+# camera and grading conventions. Schema: drscreen.training.settings.TrainingRunConfig.
+#
+# Demonstrated on IDRiD: run with a data config where sources.idrid.adaptation
+# is true, so the 413 official training images become train/val and the 103
+# official test images stay untouched for the final evaluation.
+
+data_config: configs/data.yaml   # override with a data config that enables adaptation
+sources: [idrid]
+runs_dir: runs
+init_checkpoint: null             # set to the checkpoint being adapted
+model:
+  backbone: efficientnet_b3       # must match init_checkpoint's backbone
+  pretrained: false
+  weights_path: null
+  drop_rate: 0.3
+
+augmentation:
+  # Same phone-camera simulation as configs/train_grading.yaml.
+  crop_scale: {min: 0.8, max: 1.0}
+  rotation_degrees: 20
+  flip_probability: 0.5
+  brightness: 0.3
+  contrast: 0.3
+  saturation: 0.2
+  hue: 0.03
+  blur_probability: 0.3
+  blur_sigma: {min: 0.5, max: 2.5}
+  vignette_probability: 0.4
+  vignette_strength: {min: 0.2, max: 0.6}
+
+optimisation:
+  epochs: 15
+  batch_size: 8           # a few hundred images: small batches give more updates
+  learning_rate: 5.0e-5   # a sixth of the from-scratch rate, to adjust rather than relearn
+  weight_decay: 1.0e-4
+  class_weight_power: 0.5
+  early_stopping_patience: 5
+  num_workers: 4
+  mixed_precision: true
+  device: auto
+  seed: 42
+  deterministic: false
+
+referable_min_grade: 2

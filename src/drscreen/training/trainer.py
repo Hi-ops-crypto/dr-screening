@@ -34,9 +34,9 @@ from drscreen.data.settings import DataConfig
 from drscreen.devices import resolve_device
 from drscreen.evaluation.metrics import summarise
 from drscreen.evaluation.predict import predict
-from drscreen.exceptions import DataError
-from drscreen.models.checkpoint import CheckpointMetadata, save_checkpoint
-from drscreen.models.factory import build_classifier, input_stats
+from drscreen.exceptions import DataError, ModelError
+from drscreen.models.checkpoint import CheckpointMetadata, load_checkpoint, save_checkpoint
+from drscreen.models.factory import ModelConfig, build_classifier, input_stats
 from drscreen.reproducibility import git_state, seed_everything
 from drscreen.training.settings import OptimisationConfig, TrainingRunConfig
 
@@ -61,15 +61,18 @@ class _Splits:
     preprocessing: PreprocessingConfig
 
 
-def class_weights(labels: np.ndarray, num_classes: int) -> torch.Tensor:
-    """Inverse-frequency class weights, ``n_samples / (n_classes * n_class)``.
+def class_weights(labels: np.ndarray, num_classes: int, power: float) -> torch.Tensor:
+    """Inverse-frequency class weights, ``(n_samples / (n_classes * n_class)) ** power``.
 
-    With these weights every class contributes equally to the loss in
-    expectation, which stops the majority class (no DR) from dominating.
+    With ``power`` 1 every class contributes equally to the loss in
+    expectation, which stops the majority class (no DR) from dominating but
+    pushes borderline images towards rarer, higher grades. Smaller powers
+    soften the correction; 0 gives unweighted cross-entropy.
 
     Args:
         labels: Integer training labels.
         num_classes: Number of classes.
+        power: Exponent applied to the inverse-frequency weights.
 
     Returns:
         A float32 tensor of one weight per class.
@@ -81,7 +84,7 @@ def class_weights(labels: np.ndarray, num_classes: int) -> torch.Tensor:
     if (counts == 0).any():
         missing = np.flatnonzero(counts == 0).tolist()
         raise DataError(f"Classes {missing} have no training images; cannot weight the loss.")
-    return torch.tensor(len(labels) / (num_classes * counts), dtype=torch.float32)
+    return torch.tensor((len(labels) / (num_classes * counts)) ** power, dtype=torch.float32)
 
 
 def run_training(config: TrainingRunConfig, data: DataConfig, repo_dir: Path) -> Path:
@@ -107,7 +110,7 @@ def run_training(config: TrainingRunConfig, data: DataConfig, repo_dir: Path) ->
     label_column, class_names = splits.label_column, splits.class_names
     preprocessing, train_rows, val_rows = splits.preprocessing, splits.train, splits.val
 
-    model = build_classifier(config.model, len(class_names)).to(device)
+    model, model_config, init_run_id = _initial_model(config, splits, device)
     mean, std = input_stats(model)
     augmentation = build_augmentation(config.augmentation, preprocessing.image_size)
     train_loader = _loader(
@@ -124,7 +127,9 @@ def run_training(config: TrainingRunConfig, data: DataConfig, repo_dir: Path) ->
         shuffle=False,
         device=device,
     )
-    weights = class_weights(train_rows[label_column].to_numpy(), len(class_names))
+    weights = class_weights(
+        train_rows[label_column].to_numpy(), len(class_names), options.class_weight_power
+    )
     criterion = torch.nn.CrossEntropyLoss(weight=weights.to(device))
     optimiser = torch.optim.AdamW(
         model.parameters(), lr=options.learning_rate, weight_decay=options.weight_decay
@@ -133,7 +138,8 @@ def run_training(config: TrainingRunConfig, data: DataConfig, repo_dir: Path) ->
     use_amp = options.mixed_precision and device.type == "cuda"
     scaler = torch.amp.GradScaler(device.type, enabled=use_amp)
 
-    run_id = f"{config.source.value}-{datetime.now(UTC).strftime(RUN_ID_TIME_FORMAT)}"
+    sources = "+".join(source.value for source in config.sources)
+    run_id = f"{sources}-{datetime.now(UTC).strftime(RUN_ID_TIME_FORMAT)}"
     run_dir = config.runs_dir / run_id
     run_dir.mkdir(parents=True)
     _write_run_record(
@@ -148,6 +154,7 @@ def run_training(config: TrainingRunConfig, data: DataConfig, repo_dir: Path) ->
             "train_images": len(train_rows),
             "val_images": len(val_rows),
             "class_weights": weights.tolist(),
+            "init_run_id": init_run_id,
             "config": config.model_dump(mode="json"),
             "preprocessing": preprocessing.model_dump(mode="json"),
         },
@@ -171,7 +178,8 @@ def run_training(config: TrainingRunConfig, data: DataConfig, repo_dir: Path) ->
             use_amp=use_amp,
         )
         scheduler.step()
-        y_true, y_pred, val_loss = predict(model, val_loader, device)
+        y_true, probabilities, val_loss = predict(model, val_loader, device)
+        y_pred = probabilities.argmax(axis=1)
         metrics = summarise(y_true, y_pred, class_names, config.referable_min_grade, bootstrap=None)
         _log_epoch(
             run_dir,
@@ -188,7 +196,7 @@ def run_training(config: TrainingRunConfig, data: DataConfig, repo_dir: Path) ->
         metadata = CheckpointMetadata(
             run_id=run_id,
             epoch=epoch,
-            model=config.model,
+            model=model_config,
             class_names=class_names,
             preprocessing=preprocessing,
             mean=mean,
@@ -215,8 +223,48 @@ def run_training(config: TrainingRunConfig, data: DataConfig, repo_dir: Path) ->
     return run_dir
 
 
+def _initial_model(
+    config: TrainingRunConfig, splits: _Splits, device: torch.device
+) -> tuple[torch.nn.Module, ModelConfig, str | None]:
+    """Build a fresh classifier, or load the checkpoint to fine-tune from.
+
+    Args:
+        config: Training configuration.
+        splits: Loaded data, for the class names and preprocessing recipe.
+        device: Device to put the model on.
+
+    Returns:
+        The model in training mode on ``device``, the model config to record in new
+        checkpoints, and the run id it was initialised from (``None`` if fresh).
+
+    Raises:
+        ModelError: If the backbone cannot be built, or the starting checkpoint
+            has another backbone, other classes or another preprocessing recipe.
+    """
+    if config.init_checkpoint is None:
+        model = build_classifier(config.model, len(splits.class_names))
+        return model.to(device), config.model, None
+    model, start = load_checkpoint(config.init_checkpoint, device)
+    mismatches = {
+        "backbone": (start.model.backbone, config.model.backbone),
+        "class names": (start.class_names, splits.class_names),
+        "preprocessing": (start.preprocessing, splits.preprocessing),
+    }
+    for name, (found, expected) in mismatches.items():
+        if found != expected:
+            raise ModelError(
+                f"Cannot fine-tune from {config.init_checkpoint}: its {name} {found} "
+                f"differs from {expected}."
+            )
+    logger.info("Fine-tuning from %s (run %s)", config.init_checkpoint, start.run_id)
+    return model.train(), start.model, start.run_id
+
+
 def _load_splits(config: TrainingRunConfig, data: DataConfig) -> _Splits:
-    """Read the preprocessed manifest for the configured source and split it.
+    """Read the preprocessed manifests of the configured sources and split them.
+
+    Training and validation rows of every source are pooled, so the best
+    checkpoint is the one that does best across all the sources' validation images.
 
     Args:
         config: Training configuration.
@@ -229,14 +277,25 @@ def _load_splits(config: TrainingRunConfig, data: DataConfig) -> _Splits:
         DataError: If the cache is missing, was cropped with other settings,
             or the manifest is invalid.
     """
-    label_column = LABEL_COLUMN[config.source]
+    label_column = LABEL_COLUMN[config.sources[0]]
     class_names = CLASS_NAMES[label_column]
-    preprocessing = data.preprocessing.for_source(config.source)
-    manifest_path = data.paths.processed_manifest(config.source)
-    if not manifest_path.is_file():
-        raise DataError(f"No preprocessed manifest at {manifest_path}; run `make prepare-data`.")
-    require_cache_matches(manifest_path.parent, preprocessing)
-    manifest = pd.read_csv(manifest_path)
+    preprocessing = data.preprocessing.for_source(config.sources[0])
+    manifests = []
+    for source in config.sources:
+        manifest_path = data.paths.processed_manifest(source)
+        if not manifest_path.is_file():
+            raise DataError(
+                f"No preprocessed manifest at {manifest_path}; run `make prepare-data`."
+            )
+        require_cache_matches(manifest_path.parent, preprocessing)
+        rows = pd.read_csv(manifest_path)
+        if not (rows[SPLIT] == Split.TRAIN.value).any():
+            raise DataError(
+                f"{source.value} has no training images. IDRiD is external test data unless "
+                "sources.idrid.adaptation is enabled in the data config."
+            )
+        manifests.append(rows)
+    manifest = pd.concat(manifests, ignore_index=True)
     validate_manifest(manifest, label_column, len(class_names))
     return _Splits(
         train=manifest[manifest[SPLIT] == Split.TRAIN.value],

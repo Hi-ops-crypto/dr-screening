@@ -17,6 +17,7 @@ import torch
 logger = logging.getLogger(__name__)
 
 GIT_TIMEOUT_SECONDS = 10
+COMMIT_FILE = "GIT_COMMIT"  # written beside a copy of the code that has no git history
 
 
 def seed_everything(seed: int, deterministic: bool) -> None:
@@ -44,14 +45,18 @@ def git_state(repo_dir: Path) -> dict[str, str | bool | None]:
         repo_dir: Any directory inside the repository.
 
     Returns:
-        ``{"commit": sha or None, "dirty": bool or None}``; both are ``None``
-        when git or the repository is unavailable, for example in a copy of
-        the code without its history.
+        ``{"commit": sha or None, "dirty": bool or None}``. In a copy of the
+        code without its history (such as a Kaggle upload) the commit comes
+        from a ``GIT_COMMIT`` file in ``repo_dir`` and ``dirty`` is ``None``;
+        both are ``None`` when neither git nor that file is available.
     """
     try:
         commit = _git(repo_dir, "rev-parse", "HEAD")
         dirty = bool(_git(repo_dir, "status", "--porcelain"))
     except (OSError, subprocess.SubprocessError):
+        commit_file = repo_dir / COMMIT_FILE
+        if commit_file.is_file():
+            return {"commit": commit_file.read_text(encoding="utf-8").strip(), "dirty": None}
         logger.warning("Git state unavailable; the run will not record its commit.")
         return {"commit": None, "dirty": None}
     return {"commit": commit, "dirty": dirty}

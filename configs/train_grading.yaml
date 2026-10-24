@@ -1,15 +1,21 @@
 # DR grading model training. Schema: drscreen.training.settings.TrainingRunConfig.
-# Sized for one Kaggle T4/P100 GPU session; a run takes well under an hour.
+# Sized for one Kaggle T4 session: about 41k training images, roughly 40 minutes
+# per epoch (image loading on 4 CPUs is the bottleneck), so 8 epochs take about
+# 5.5 hours (the session limit is 12).
 
 data_config: configs/data.yaml
-source: aptos            # IDRiD is rejected here: it is the external test set
+# Four populations (India, the US, China) and many camera models generalise
+# better than any one. IDRiD stays out: it is the external test set.
+sources: [aptos, eyepacs, eyepacs_test, ddr]
 runs_dir: runs
+init_checkpoint: null   # train from the backbone's pretrained weights
 
 model:
-  # Any timm model name. EfficientNet-B0 (5.3M parameters) fits free GPUs at
-  # 512 px. To try RETFound: backbone vit_large_patch16_224, pretrained false,
+  # Any timm model name. EfficientNet-B3 (10.7M parameters) learned more than
+  # B0 (5.3M) in the same time: training is limited by image loading on
+  # Kaggle's 4 CPUs, not by the GPU. To try RETFound: backbone vit_large_patch16_224, pretrained false,
   # weights_path pointing at its checkpoint, and matching image_size.
-  backbone: efficientnet_b0
+  backbone: efficientnet_b3
   pretrained: true       # ImageNet weights, downloaded by timm on first use
   weights_path: null
   drop_rate: 0.3         # dropout before the classifier head
@@ -33,11 +39,15 @@ augmentation:
   vignette_strength: {min: 0.2, max: 0.6}
 
 optimisation:
-  epochs: 20
-  batch_size: 24         # fits 16 GB of GPU memory at 512 px with mixed precision
+  epochs: 8              # 2.5x the data per epoch; earlier runs peaked by epoch 7-9
+  batch_size: 16         # B3 at 512 px with mixed precision within 16 GB
   learning_rate: 3.0e-4  # AdamW, cosine-decayed to zero over the run
   weight_decay: 1.0e-4
-  early_stopping_patience: 5
+  # Square root of inverse-frequency weights. Full weighting (1.0) made the
+  # first models call many healthy eyes grade 1; referral sensitivity is
+  # restored afterwards by the tuned threshold.
+  class_weight_power: 0.5
+  early_stopping_patience: 3
   num_workers: 4         # Kaggle notebooks have 4 CPU cores
   mixed_precision: true  # float16 on CUDA only; ignored elsewhere
   device: auto
