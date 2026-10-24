@@ -1,0 +1,40 @@
+# Screening-priority tier from clinical risk factors.
+# Schema: drscreen.risk.calculator.RiskConfig.
+#
+# Each factor adds the points of the highest band its value reaches; the total
+# picks the tier. The factors and the direction of their effect are published
+# associations with diabetic retinopathy. The points and tier cut-offs are a
+# design choice of this prototype, NOT a validated clinical score.
+#
+# Main source for the bands: Yau JWY et al., "Global prevalence and major risk
+# factors of diabetic retinopathy", Diabetes Care 2012;35(3):556-64 (pooled
+# individual data from 35 studies), which reports prevalence rising with
+# diabetes duration (<10, 10-19, >=20 years), HbA1c (<=7.0, 7.1-8.0, 8.1-9.0,
+# >9.0 %) and blood pressure above 140/90 mmHg.
+
+diabetes_duration_years:
+  - {min: 10, points: 1}
+  - {min: 20, points: 2}
+
+hba1c_percent:
+  - {min: 7.1, points: 1}   # above the usual 7.0 % treatment target
+  - {min: 9.1, points: 2}   # Yau et al.'s highest band
+
+systolic_bp_mmhg:
+  # Also UKPDS 38, BMJ 1998;317:703-13: tighter blood pressure control slowed
+  # retinopathy progression.
+  - {min: 140, points: 1}
+
+age_years:
+  # Design choice: older age stands in for longer, often undiagnosed, exposure
+  # to hyperglycaemia. Its independent association is weak, hence one point.
+  - {min: 60, points: 1}
+
+# Diabetic kidney disease is a microvascular complication that commonly
+# accompanies retinopathy (ADA Standards of Care, Retinopathy section).
+kidney_disease_points: 1
+
+# Maximum possible total is 7.
+tiers:
+  high_min_points: 4
+  medium_min_points: 2
