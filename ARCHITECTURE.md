@@ -12,13 +12,13 @@ itself, and the deployed web app pulls in as little as possible.
 | `cli` | Shared argument parsing and error handling for `scripts/` | `logging_setup`, `exceptions` |
 | `devices`, `reproducibility` | Device selection; seeding and git provenance | `exceptions` |
 | `data` | Dataset fetching, manifest schema, preprocessing, augmentation, torch `Dataset` | `config`, `exceptions` |
-| `models` | Build a classifier from a backbone name; save and load self-describing checkpoints | `data.preprocessing`, `data.tensors` |
+| `models` | Build a classifier from a backbone name; save and load self-describing checkpoints; average several checkpoints as an ensemble | `data.preprocessing`, `data.tensors` |
 | `evaluation` | Metrics, batch prediction, reports, external evaluation of a checkpoint | `data`, `models`, `devices` |
 | `training` | Training loop, class weighting, run logs | `data`, `models`, `evaluation`, `reproducibility` |
-| `explain` | Grad-CAM over any convolutional classifier | nothing internal |
-| `inference` | Validate input, quality gate, grade, referral guidance | `data.preprocessing`, `models`, `explain` |
+| `explain` | Grad-CAM over any convolutional classifier, heatmap overlay | nothing internal |
+| `inference` | Validate input, quality gate, grade, referral guidance | `config`, `devices`, `data.preprocessing`, `data.tensors`, `models`, `explain` |
 | `risk` | Screening-priority tier from clinical factors | `config`, `exceptions` |
-| `app` | Gradio UI and audit log | `inference`, `risk` |
+| `app` | Gradio wiring and checkpoint download (`ui`), result HTML and theme (`views`), audit log | `config`, `inference`, `risk` |
 
 ## Why the boundaries are drawn here
 
@@ -26,7 +26,7 @@ itself, and the deployed web app pulls in as little as possible.
 arrays only: no file I/O, no pandas, no dataset knowledge. `data.image_io`
 does reading and writing, `data.sources` knows each dataset's layout,
 `data.fetch` downloads, and `data.prepare` runs preprocessing over a whole
-manifest. Inference imports only `preprocessing` (and `image_io`), so the
+manifest. Inference imports only `preprocessing` and `tensors`, so the
 deployed app never carries dataset or download code.
 
 **Data does not know about models.** Preprocessing turns a raw photograph into
@@ -53,12 +53,26 @@ takes them from there, so a later edit to `configs/data.yaml` cannot silently
 change what an existing model is fed. This is why `models` may import the
 preprocessing schema, and nothing else from `data`.
 
+**One ensemble implementation.** `models.ensemble` is the only code that
+combines several checkpoints' probabilities, with or without flipped copies.
+Evaluation and the app both call it, and a test checks that the app's
+probabilities match it, so the numbers we report are the numbers users see.
+
+**External rows are never chosen with.** Evaluation scores only rows whose
+split is `external`; threshold tuning and checkpoint selection use only
+`val` rows; training uses only `train` rows. IDRiD is entirely external unless
+site adaptation is switched on, in which case only its official test subset
+stays external. The rule is enforced by the split column rather than by
+refusing a dataset name.
+
 **Explainability is standalone.** Grad-CAM takes a model, a target layer and an
 input tensor. It knows nothing about DR, so it can be used from a notebook, the
 evaluation report or the app.
 
 **The app contains no model logic.** `app` turns user input into calls to
-`inference.Screener` and `risk`, and turns results into UI components. Swapping
+`inference.Screener` and `risk`, and turns results into HTML. `views` holds all
+markup and styling as plain strings, so the look can be tested without a
+browser and changed without touching the handlers in `ui`. Swapping
 Gradio for another front end, or calling the screener from a batch job, needs
 no changes outside `app`.
 
@@ -77,7 +91,8 @@ is always the complete list of what a run can be configured with.
 ## Enforcement
 
 The import rules above are checked by `import-linter` as part of `make lint`;
-contracts live in `pyproject.toml` and are added as each module is built.
+contracts live in `pyproject.toml`. The app contract checks direct imports
+only, since the app necessarily reaches models through `inference`.
 
 ## Errors
 

@@ -23,6 +23,9 @@ htmlcov/
 *.ckpt
 *.safetensors
 
+# Commit id written beside code uploaded without git history
+/GIT_COMMIT
+
 # Logs and audit trails
 /logs/
 *.log
