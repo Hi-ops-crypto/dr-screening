@@ -1,0 +1,37 @@
+# Web app on a Hugging Face Space. Schema: drscreen.app.ui.AppConfig.
+# Same as configs/app.yaml except that checkpoints come from the Hub.
+
+checkpoints:
+  # Upload both best.pt files to a Hub model repository, then pin the commit
+  # that contains them. The app refuses to start until revision is a full sha.
+  hub:
+    repo_id: YOUR-USER/dr-screening-models
+    revision: REPLACE-WITH-40-CHARACTER-COMMIT-SHA
+  quality: quality.pt
+  grading: [grading-v4.pt]
+
+screener:
+  device: cpu
+  limits:
+    min_side: 512
+    max_pixels: 50000000
+  heatmap_alpha: 0.4
+  # From `make tune-referral`: the grading runs served together, whether each
+  # image is also averaged with its mirror image, and the referral threshold
+  # tuned for exactly that combination. The app refuses any other checkpoints.
+  # From `make tune-referral`: the grading runs served together, whether each
+  # image is also averaged with its mirror image, and the referral threshold
+  # tuned for exactly that combination. The app refuses any other checkpoints.
+  grading:
+    # v4: EfficientNet-B3 trained on APTOS + EyePACS train and test labels + DDR
+    # (41k images). It beat v2+v3 and v2+v3+v4 on validation QWK across those
+    # four sources (0.834 vs 0.757 and 0.802).
+    run_ids: [aptos+eyepacs+eyepacs_test+ddr-20261024T060340Z]
+    flip_tta: false
+    # 95% sensitivity on validation. On IDRiD (external, 516 photos): sensitivity
+    # 0.98 (95% CI 0.96-0.99), specificity 0.69 (0.63-0.76); QWK 0.87, exact grade 71%.
+    referral_threshold: 0.0793
+
+risk_config: configs/risk.yaml
+# Free Spaces have no persistent disk: this file is lost when the Space restarts.
+audit_log: audit/screenings.csv

@@ -1,0 +1,42 @@
+# Web app for the IDRiD site: grading models fine-tuned on IDRiD's official
+# training images (configs/finetune_site.yaml). Serve with
+#   make serve APP_CONFIG=configs/app_site_idrid.yaml
+# configs/app.yaml stays the default for clinics without their own adaptation.
+# Schema: drscreen.app.ui.AppConfig.
+# Preprocessing and input statistics come from each checkpoint, not from here.
+
+checkpoints:
+  # null: quality and grading below are local files (copy each run's best.pt
+  # there). To serve from the Hugging Face Hub instead, set
+  #   hub: {repo_id: <user>/<model-repo>, revision: <40-character commit sha>}
+  # and give file names inside that repository.
+  hub: null
+  quality: models/quality.pt
+  grading: [models/site-idrid-v4.pt]
+
+screener:
+  device: cpu              # free Hugging Face Spaces have no GPU
+  limits:
+    # The grading model sees 512 px crops; smaller photographs would be
+    # upscaled and add no retinal detail.
+    min_side: 512
+    # Above any current phone or fundus camera (IDRiD is 12 MP); stops a huge
+    # upload from exhausting memory.
+    max_pixels: 50000000
+  heatmap_alpha: 0.4       # heatmap opacity over the photograph
+  # From `make tune-referral`: the grading runs served together, whether each
+  # image is also averaged with its mirror image, and the referral threshold
+  # tuned for exactly that combination. The app refuses any other checkpoints.
+  grading:
+    # v4 fine-tuned on 330 IDRiD training images (configs/finetune_site.yaml).
+    # IDRiD validation (83 photos): QWK 0.967, exact grade 88%.
+    run_ids: [idrid-20261024T111440Z]
+    flip_tta: false
+    # Tuning found the predicted grade alone reached 95% validation sensitivity,
+    # so the threshold adds nothing (1.0). On the 103 official IDRiD test photos:
+    # exact grade 74%, QWK 0.83 (95% CI 0.75-0.91), referral sensitivity 0.86,
+    # specificity 0.92.
+    referral_threshold: 1.0
+
+risk_config: configs/risk.yaml
+audit_log: audit/screenings.csv

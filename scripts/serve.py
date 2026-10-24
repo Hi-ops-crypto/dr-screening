@@ -1,0 +1,24 @@
+"""Start the screening web app on http://127.0.0.1:7860."""
+
+import argparse
+import sys
+from pathlib import Path
+
+from drscreen.app.ui import AppConfig, create_app, launch
+from drscreen.cli import build_parser, run
+from drscreen.config import load_config
+
+DEFAULT_CONFIG = Path("configs/app.yaml")
+
+
+def main(args: argparse.Namespace) -> None:
+    """Load the app config, the models, and serve until interrupted.
+
+    Args:
+        args: Parsed command-line arguments.
+    """
+    launch(create_app(load_config(args.config, AppConfig, args.override)))
+
+
+if __name__ == "__main__":
+    sys.exit(run(main, build_parser(__doc__, DEFAULT_CONFIG).parse_args()))
