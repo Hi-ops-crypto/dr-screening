@@ -11,7 +11,7 @@ from drscreen.data.schema import (
     SPLIT,
     validate_manifest,
 )
-from drscreen.data.splits import assign_splits
+from drscreen.data.splits import assign_splits, cap_per_class
 from drscreen.exceptions import DataError
 
 
@@ -113,3 +113,13 @@ def test_manifest_duplicates_are_rejected(column: str) -> None:
 
     with pytest.raises(DataError, match="duplicated"):
         validate_manifest(manifest, GRADE, 5)
+
+
+def test_cap_per_class_trims_only_large_classes_reproducibly() -> None:
+    manifest = pd.DataFrame({"label": [0] * 10 + [1] * 2, "value": range(12)})
+
+    capped = cap_per_class(manifest, "label", max_per_class=3, seed=0)
+
+    assert capped["label"].value_counts().to_dict() == {0: 3, 1: 2}
+    assert capped["value"].is_monotonic_increasing
+    assert capped.equals(cap_per_class(manifest, "label", max_per_class=3, seed=0))

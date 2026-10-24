@@ -13,10 +13,17 @@ import pandas as pd
 import requests
 from kagglehub import exceptions as kaggle_errors
 
-from drscreen.data.schema import GRADE, QUALITY, SPLIT, Source, Split
+from drscreen.data.schema import GRADE, IMAGE_ID, QUALITY, SPLIT, Source, Split
 from drscreen.data.settings import DataConfig
-from drscreen.data.sources import parse_aptos, parse_eyeq, parse_idrid
-from drscreen.data.splits import assign_splits
+from drscreen.data.sources import (
+    IDRID_TRAINING_PREFIX,
+    parse_aptos,
+    parse_ddr,
+    parse_eyepacs,
+    parse_eyeq,
+    parse_idrid,
+)
+from drscreen.data.splits import assign_splits, cap_per_class
 from drscreen.exceptions import DataError
 
 logger = logging.getLogger(__name__)
@@ -128,8 +135,11 @@ def download_file(url: str, destination: Path, timeout_seconds: float) -> Path:
 def fetch_manifest(source: Source, config: DataConfig) -> pd.DataFrame:
     """Download one dataset and build its manifest with split assignments.
 
-    APTOS and EyeQ are split into train and validation. IDRiD is marked
-    entirely as external and is never used for training or model selection.
+    APTOS, EyePACS and EyeQ are split into train and validation. IDRiD is
+    marked entirely as external and is never used for training or model
+    selection, unless ``sources.idrid.adaptation`` is set: then its official
+    training subset is split into train and validation and only its official
+    test subset is external. EyePACS is capped per grade before splitting.
 
     Args:
         source: Dataset to fetch.
@@ -148,8 +158,37 @@ def fetch_manifest(source: Source, config: DataConfig) -> pd.DataFrame:
         return assign_splits(parse_aptos(root), GRADE, config.split.val_fraction, config.split.seed)
     if source is Source.IDRID:
         manifest = parse_idrid(download_kaggle_dataset(sources.idrid.kaggle_dataset, raw_dir))
-        manifest[SPLIT] = Split.EXTERNAL.value
-        return manifest
+        if not sources.idrid.adaptation:
+            manifest[SPLIT] = Split.EXTERNAL.value
+            return manifest
+        official_train = manifest[IMAGE_ID].str.startswith(IDRID_TRAINING_PREFIX)
+        adaptation = assign_splits(
+            manifest[official_train], GRADE, config.split.val_fraction, config.split.seed
+        )
+        test = manifest[~official_train].assign(**{SPLIT: Split.EXTERNAL.value})
+        return pd.concat([adaptation, test], ignore_index=True)
+    if source in (Source.EYEPACS, Source.EYEPACS_TEST):
+        eyepacs = sources.eyepacs if source is Source.EYEPACS else sources.eyepacs_test
+        root = download_kaggle_dataset(eyepacs.kaggle_dataset, raw_dir)
+        parsed = parse_eyepacs(
+            root,
+            eyepacs.labels_file,
+            eyepacs.images_subdir,
+            image_suffix=eyepacs.image_suffix,
+            source=source,
+            id_prefix=eyepacs.id_prefix,
+        )
+        manifest = cap_per_class(parsed, GRADE, eyepacs.max_images_per_grade, config.split.seed)
+        return assign_splits(manifest, GRADE, config.split.val_fraction, config.split.seed)
+    if source is Source.DDR:
+        root = download_kaggle_dataset(sources.ddr.kaggle_dataset, raw_dir)
+        manifest = cap_per_class(
+            parse_ddr(root / sources.ddr.grading_subdir),
+            GRADE,
+            sources.ddr.max_images_per_grade,
+            config.split.seed,
+        )
+        return assign_splits(manifest, GRADE, config.split.val_fraction, config.split.seed)
     images_root = download_kaggle_dataset(sources.eyeq.kaggle_dataset, raw_dir / EYEQ_IMAGES_SUBDIR)
     label_files = [
         download_file(

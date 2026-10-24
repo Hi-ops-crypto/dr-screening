@@ -2,7 +2,7 @@
 
 A manifest is a table with one row per image. Whatever a dataset's on-disk
 layout, its parser in ``drscreen.data.sources`` produces a manifest with these
-columns, so everything downstream handles APTOS, IDRiD and EyeQ identically.
+columns, so everything downstream handles every dataset identically.
 
 Columns:
     image_id: Identifier unique within the dataset; names cached files.
@@ -50,12 +50,18 @@ class Source(StrEnum):
     APTOS = "aptos"
     IDRID = "idrid"
     EYEQ = "eyeq"
+    EYEPACS = "eyepacs"
+    EYEPACS_TEST = "eyepacs_test"
+    DDR = "ddr"
 
 
 LABEL_COLUMN: dict[Source, str] = {
     Source.APTOS: GRADE,
     Source.IDRID: GRADE,
     Source.EYEQ: QUALITY,
+    Source.EYEPACS: GRADE,
+    Source.EYEPACS_TEST: GRADE,
+    Source.DDR: GRADE,
 }
 CLASS_NAMES: dict[str, tuple[str, ...]] = {GRADE: DR_GRADE_NAMES, QUALITY: QUALITY_NAMES}
 

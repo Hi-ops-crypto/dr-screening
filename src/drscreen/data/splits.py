@@ -1,4 +1,4 @@
-"""Reproducible, stratified, patient-grouped train/validation splits."""
+"""Reproducible, stratified, patient-grouped train/validation splits and subsampling."""
 
 import numpy as np
 import pandas as pd
@@ -7,6 +7,25 @@ from sklearn.model_selection import StratifiedGroupKFold
 from drscreen.data.schema import GROUP, SPLIT, Split
 
 MAX_VAL_FRACTION = 0.5
+
+
+def cap_per_class(
+    manifest: pd.DataFrame, label_column: str, max_per_class: int, seed: int
+) -> pd.DataFrame:
+    """Randomly keep at most ``max_per_class`` rows of each class.
+
+    Args:
+        manifest: Manifest to subsample.
+        label_column: Column holding the class.
+        max_per_class: Largest number of rows kept per class.
+        seed: Seed for the sample; the same seed keeps the same rows.
+
+    Returns:
+        The kept rows in their original order.
+    """
+    shuffled = manifest.sample(frac=1, random_state=seed)
+    kept = shuffled.groupby(label_column).head(max_per_class)
+    return manifest.loc[sorted(kept.index)].reset_index(drop=True)
 
 
 def assign_splits(

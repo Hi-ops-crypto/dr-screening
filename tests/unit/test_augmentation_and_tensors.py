@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from drscreen.data.augmentation import (
     AugmentationConfig,
+    RandomGaussianBlur,
     RandomVignette,
     Range,
     augment,
@@ -85,3 +86,15 @@ def test_image_to_tensor_normalises_per_channel() -> None:
     assert tensor.dtype == torch.float32
     assert torch.allclose(tensor[0], torch.ones(2, 2))
     assert torch.allclose(tensor[1], torch.zeros(2, 2))
+
+
+def test_gaussian_blur_applies_with_its_probability() -> None:
+    image = torch.zeros(3, 32, 32, dtype=torch.uint8)
+    image[:, 16, 16] = 255
+
+    blurred = RandomGaussianBlur(1.0, Range(min=2.0, max=2.0))(image)
+
+    assert blurred.shape == image.shape and blurred.dtype == torch.uint8
+    assert 0 < blurred[0, 16, 16] < 255
+    assert blurred[0, 16, 18] > 0
+    assert torch.equal(RandomGaussianBlur(0.0, Range(min=2.0, max=2.0))(image), image)

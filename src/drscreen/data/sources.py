@@ -38,11 +38,20 @@ APTOS_GRADE_COLUMN = "diagnosis"
 # overlap (both start at IDRiD_001), so each subset's labels must be paired
 # with that subset's own image folder.
 IDRID_SUBSETS = {"Training": "train", "Testing": "test"}
+IDRID_TRAINING_PREFIX = f"{IDRID_SUBSETS['Training']}_"
 IDRID_LABELS_GLOB = "*IDRiD_Disease Grading_{subset} Labels.csv"
 IDRID_IMAGES_DIR_GLOB = "*Disease Grading/*Original Images/*{subset} Set"
 IDRID_IMAGE_SUFFIX = ".jpg"
 IDRID_NAME_COLUMN = "Image name"
 IDRID_GRADE_COLUMN = "Retinopathy grade"
+
+EYEPACS_IMAGE_COLUMN = "image"
+EYEPACS_GRADE_COLUMN = "level"
+
+# DDR lists "<file name> <grade>" per line in one text file per official subset;
+# grade 5 marks ungradable images, which carry no DR grade and are dropped.
+DDR_SUBSETS = ("train", "valid", "test")
+DDR_UNGRADABLE = 5
 
 EYEQ_IMAGE_COLUMN = "image"
 EYEQ_QUALITY_COLUMN = "quality"
@@ -141,6 +150,117 @@ def _parse_idrid_subset(root: Path, subset: str, prefix: str) -> pd.DataFrame:
             GROUP: image_ids,
         }
     )
+
+
+def parse_eyepacs(
+    root: Path,
+    labels_file: str,
+    images_subdir: Path,
+    *,
+    image_suffix: str,
+    source: Source,
+    id_prefix: str,
+) -> pd.DataFrame:
+    """Build a manifest of EyePACS DR grades from Kaggle DR Detection 2015 labels.
+
+    The image folder is listed once rather than checking each of its tens of
+    thousands of files, which is far faster on Kaggle's network-mounted inputs.
+
+    Args:
+        root: Root of the EyePACS download.
+        labels_file: Name of the label CSV (``image`` and ``level`` columns),
+            found at any depth under ``root``.
+        images_subdir: Directory of ``<image><image_suffix>`` files, relative to ``root``.
+        image_suffix: File extension of the images, such as ``.jpeg``.
+        source: Which EyePACS label set this is.
+        id_prefix: Prepended to image ids so the training and test sets never collide.
+
+    Returns:
+        A manifest with a ``grade`` label column, grouped by patient so that
+        both eyes of a patient land in the same split.
+
+    Raises:
+        DataError: If the label file is not found exactly once or is unusable,
+            or any labelled image is missing.
+    """
+    label_file = _find_one(root, labels_file)
+    images_dir = root / images_subdir
+    labels = _read_csv(label_file)
+    _require_columns(labels, [EYEPACS_IMAGE_COLUMN, EYEPACS_GRADE_COLUMN], label_file)
+    names = labels[EYEPACS_IMAGE_COLUMN].astype(str)
+    if not images_dir.is_dir():
+        raise DataError(f"EyePACS image folder not found: {images_dir}")
+    present = {path.name for path in images_dir.iterdir()}
+    missing = [name for name in names if f"{name}{image_suffix}" not in present]
+    if missing:
+        raise DataError(
+            f"{source.value}: {len(missing)} of {len(names)} labelled images are missing from "
+            f"{images_dir}, e.g. {missing[0]}{image_suffix}."
+        )
+    manifest = pd.DataFrame(
+        {
+            IMAGE_ID: id_prefix + names,
+            IMAGE_PATH: [str(images_dir / f"{name}{image_suffix}") for name in names],
+            GRADE: labels[EYEPACS_GRADE_COLUMN].astype(int),
+            SOURCE: source.value,
+            GROUP: id_prefix + names.str.split(EYEPACS_EYE_SEPARATOR).str[0],
+        }
+    )
+    validate_manifest(manifest, GRADE, len(DR_GRADE_NAMES))
+    return manifest
+
+
+def parse_ddr(grading_dir: Path) -> pd.DataFrame:
+    """Build a manifest of DDR's gradable images from all three official subsets.
+
+    DDR's own train/valid/test division is ignored: the images are pooled and
+    split like every other training source. Ungradable images are dropped.
+
+    Args:
+        grading_dir: DDR's ``DR_grading`` directory, holding ``<subset>.txt``
+            label files and ``<subset>/`` image folders.
+
+    Returns:
+        A manifest with a ``grade`` label column. DDR provides no patient
+        identifiers, so each image is its own group.
+
+    Raises:
+        DataError: If a label file is missing or malformed, or a labelled image is missing.
+    """
+    frames = []
+    for subset in DDR_SUBSETS:
+        label_file = grading_dir / f"{subset}.txt"
+        if not label_file.is_file():
+            raise DataError(f"DDR label file not found: {label_file}")
+        try:
+            labels = pd.read_csv(label_file, sep=" ", header=None, names=["name", "grade"])
+        except (pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
+            raise DataError(f"DDR label file {label_file} could not be parsed: {exc}") from exc
+        images_dir = grading_dir / subset
+        present = {path.name for path in images_dir.iterdir()} if images_dir.is_dir() else set()
+        missing = [name for name in labels["name"] if name not in present]
+        if missing:
+            raise DataError(
+                f"ddr: {len(missing)} of {len(labels)} {subset} images are missing from "
+                f"{images_dir}, e.g. {missing[0]}."
+            )
+        labels["path"] = [str(images_dir / name) for name in labels["name"]]
+        frames.append(labels)
+    labels = pd.concat(frames, ignore_index=True)
+    gradable = labels[labels["grade"] != DDR_UNGRADABLE]
+    logger.info("DDR: dropped %d ungradable images.", len(labels) - len(gradable))
+    image_ids = "ddr_" + gradable["name"].str.rsplit(".", n=1).str[0]
+    manifest = pd.DataFrame(
+        {
+            IMAGE_ID: image_ids.to_numpy(),
+            IMAGE_PATH: gradable["path"].to_numpy(),
+            GRADE: gradable["grade"].astype(int).to_numpy(),
+            SOURCE: Source.DDR.value,
+            GROUP: image_ids.to_numpy(),
+        }
+    )
+    validate_manifest(manifest, GRADE, len(DR_GRADE_NAMES))
+    return manifest
 
 
 def parse_eyeq(label_files: Sequence[Path], images_dir: Path) -> pd.DataFrame:

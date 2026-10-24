@@ -50,10 +50,16 @@ class AptosSource(StrictModel):
 
 
 class IdridSource(StrictModel):
-    """IDRiD, downloaded from a Kaggle mirror pinned to a version."""
+    """IDRiD, downloaded from a Kaggle mirror pinned to a version.
+
+    Normally every image is external test data. With ``adaptation`` the
+    official training subset is split into train and validation for site
+    adaptation, and only the official test subset stays external.
+    """
 
     enabled: bool
     kaggle_dataset: str
+    adaptation: bool
 
 
 class EyeqSource(StrictModel):
@@ -65,12 +71,41 @@ class EyeqSource(StrictModel):
     label_urls: list[HttpUrl] = Field(min_length=1)
 
 
+class EyepacsSource(StrictModel):
+    """EyePACS DR grades from the Kaggle DR Detection 2015 training or test labels.
+
+    No DR makes up about three quarters of EyePACS, so each grade is capped at
+    ``max_images_per_grade`` to keep epochs short without losing severe cases.
+    ``id_prefix`` keeps image ids unique when both label sets are used.
+    """
+
+    enabled: bool
+    kaggle_dataset: str
+    images_subdir: Path
+    labels_file: str
+    image_suffix: str
+    id_prefix: str
+    max_images_per_grade: int = Field(gt=0)
+
+
+class DdrSource(StrictModel):
+    """DDR (Li et al., Information Sciences 2019): 13,673 images from 147 Chinese hospitals."""
+
+    enabled: bool
+    kaggle_dataset: str
+    grading_subdir: Path
+    max_images_per_grade: int = Field(gt=0)
+
+
 class SourcesConfig(StrictModel):
     """Configuration for every dataset."""
 
     aptos: AptosSource
     idrid: IdridSource
     eyeq: EyeqSource
+    eyepacs: EyepacsSource
+    eyepacs_test: EyepacsSource
+    ddr: DdrSource
 
     def is_enabled(self, source: Source) -> bool:
         """Return whether a source is enabled.

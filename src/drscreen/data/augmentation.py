@@ -8,6 +8,8 @@ would, using torch's random generator so data-loader workers are seeded
 reproducibly.
 """
 
+import cv2
+import numpy as np
 import torch
 from pydantic import Field, model_validator
 from torchvision.transforms import v2
@@ -17,7 +19,6 @@ from drscreen.data.preprocessing import UINT8_MAX, Image
 from drscreen.data.tensors import to_chw_tensor, to_hwc_image
 
 SQUARE_ASPECT = (1.0, 1.0)  # keep the circular fundus circular when cropping
-KERNEL_SIGMAS = 3  # Gaussian kernel spans +/- 3 sigma, which holds >99% of its weight
 
 
 class Range(StrictModel):
@@ -87,6 +88,41 @@ class RandomVignette(torch.nn.Module):
         return (image.float() * gain).round().clamp(0, UINT8_MAX).to(torch.uint8)
 
 
+class RandomGaussianBlur(torch.nn.Module):
+    """Defocus the image with a Gaussian of random width, as hand-held capture does.
+
+    Uses OpenCV, which blurs a 512 px image in about a millisecond; torchvision's
+    tensor blur took over 150 ms and was the slowest step of data loading.
+    """
+
+    def __init__(self, probability: float, sigma: Range) -> None:
+        """Create the transform.
+
+        Args:
+            probability: Chance of blurring an image.
+            sigma: Range of the Gaussian's standard deviation, in pixels.
+        """
+        super().__init__()
+        self.probability = probability
+        self.sigma = sigma
+
+    def forward(self, image: torch.Tensor) -> torch.Tensor:
+        """Blur with probability ``self.probability``.
+
+        Args:
+            image: uint8 tensor of shape ``(3, H, W)``.
+
+        Returns:
+            The blurred image, or ``image`` unchanged.
+        """
+        if torch.rand(1).item() >= self.probability:
+            return image
+        sigma = self.sigma.min + (self.sigma.max - self.sigma.min) * torch.rand(1).item()
+        pixels = np.ascontiguousarray(image.permute(1, 2, 0).numpy())
+        blurred = cv2.GaussianBlur(pixels, ksize=(0, 0), sigmaX=sigma)
+        return torch.from_numpy(blurred).permute(2, 0, 1)
+
+
 def build_augmentation(config: AugmentationConfig, image_size: int) -> v2.Compose:
     """Compose the phone-camera augmentation pipeline.
 
@@ -97,7 +133,6 @@ def build_augmentation(config: AugmentationConfig, image_size: int) -> v2.Compos
     Returns:
         A transform mapping a uint8 ``(3, H, W)`` tensor to one of the same shape.
     """
-    blur_kernel = 2 * round(KERNEL_SIGMAS * config.blur_sigma.max) + 1
     return v2.Compose(
         [
             v2.RandomResizedCrop(
@@ -114,14 +149,7 @@ def build_augmentation(config: AugmentationConfig, image_size: int) -> v2.Compos
                 saturation=config.saturation,
                 hue=config.hue,
             ),
-            v2.RandomApply(
-                [
-                    v2.GaussianBlur(
-                        blur_kernel, sigma=(config.blur_sigma.min, config.blur_sigma.max)
-                    )
-                ],
-                p=config.blur_probability,
-            ),
+            RandomGaussianBlur(config.blur_probability, config.blur_sigma),
             RandomVignette(config.vignette_probability, config.vignette_strength),
         ]
     )

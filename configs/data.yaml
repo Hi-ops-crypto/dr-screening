@@ -16,6 +16,10 @@ sources:
     enabled: true
     # Mirror of the official IEEE DataPort release (CC BY 4.0), pinned version.
     kaggle_dataset: aaryapatel98/indian-diabetic-retinopathy-image-dataset/versions/1
+    # false: all 516 images are the external test set. true (site adaptation,
+    # see configs/finetune_site.yaml): the 413 official training images are
+    # split into train/val and only the 103 official test images stay external.
+    adaptation: false
   eyeq:
     enabled: true
     # 35,126 EyePACS training images (about 7.8 GB). Attach it in a Kaggle
@@ -25,6 +29,42 @@ sources:
     label_urls:
       - https://raw.githubusercontent.com/HzFu/EyeQ/master/data/Label_EyeQ_train.csv
       - https://raw.githubusercontent.com/HzFu/EyeQ/master/data/Label_EyeQ_test.csv
+  eyepacs:
+    enabled: true
+    # DR grades for the same 35,126 EyePACS images (Kaggle DR Detection 2015),
+    # from the same pinned mirror as EyeQ. A second camera population makes
+    # the grading model generalise better than APTOS alone.
+    kaggle_dataset: tanlikesmath/diabetic-retinopathy-resized/versions/7
+    images_subdir: resized_train/resized_train
+    labels_file: trainLabels.csv
+    image_suffix: .jpeg
+    id_prefix: ""
+    # Grade counts are about 25.8k / 2.4k / 5.3k / 0.9k / 0.7k. Capping at 8000
+    # keeps every severe case and trims No DR, so an epoch fits a Kaggle GPU budget.
+    # Changing it reshuffles the split, so earlier models' validation images
+    # could become training images: keep it fixed when comparing models.
+    max_images_per_grade: 8000
+  eyepacs_test:
+    enabled: true
+    # The 53,576 EyePACS test images whose grades were released after the 2015
+    # competition: about 14k with DR, more than doubling the severe grades.
+    # Different patients from the training set. About 18.6 GB; attach on Kaggle.
+    kaggle_dataset: benjaminwarner/resized-2015-2019-blindness-detection-images
+    images_subdir: resized test 15
+    labels_file: testLabels15.csv
+    image_suffix: .jpg
+    id_prefix: test15_
+    # Grade counts are about 39.5k / 3.8k / 7.9k / 1.2k / 1.2k.
+    max_images_per_grade: 6000
+  ddr:
+    enabled: true
+    # DDR (Li et al., Information Sciences 2019;501:511-22), 147 hospitals in
+    # China: a population and camera mix unlike EyePACS, APTOS or IDRiD.
+    # About 14 GB; attach on Kaggle. Only the DR_grading part is used.
+    kaggle_dataset: samriddhibagchi/ddr-dataset-credits-to-authors
+    grading_subdir: DDR-dataset/DR_grading
+    # Gradable counts are about 6.3k / 0.6k / 4.5k / 0.2k / 0.9k.
+    max_images_per_grade: 6000
 
 download_timeout_seconds: 60
 
