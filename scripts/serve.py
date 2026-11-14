@@ -1,10 +1,13 @@
-"""Start the screening web app on http://127.0.0.1:7860."""
+"""Start the screening web app on http://127.0.0.1:7860 (classic Gradio UI at /classic)."""
 
 import argparse
 import sys
 from pathlib import Path
 
-from drscreen.app.ui import AppConfig, create_app, launch
+import uvicorn
+
+from drscreen.app.ui import AppConfig
+from drscreen.app.web import create_web
 from drscreen.cli import build_parser, run
 from drscreen.config import load_config
 
@@ -17,7 +20,7 @@ def main(args: argparse.Namespace) -> None:
     Args:
         args: Parsed command-line arguments.
     """
-    launch(create_app(load_config(args.config, AppConfig, args.override)))
+    uvicorn.run(create_web(load_config(args.config, AppConfig, args.override)), port=7860)
 
 
 if __name__ == "__main__":

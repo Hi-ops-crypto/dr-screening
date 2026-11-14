@@ -166,11 +166,10 @@ def test_space_config_needs_a_pinned_commit() -> None:
     space_config = REPO_ROOT / "deploy" / "hf_space" / "configs" / "app.yaml"
 
     with pytest.raises(ConfigError, match="revision"):
-        load_config(space_config, AppConfig)
-    config = load_config(space_config, AppConfig, [f"checkpoints.hub.revision={SHA}"])
-    assert config.checkpoints.hub == HubSource(
-        repo_id="YOUR-USER/dr-screening-models", revision=SHA
-    )
+        load_config(space_config, AppConfig, ["checkpoints.hub.revision=main"])
+    hub = load_config(space_config, AppConfig).checkpoints.hub
+    assert hub is not None
+    assert len(hub.revision) == len(SHA)
 
 
 def test_hub_checkpoints_are_downloaded_at_the_pinned_revision(
@@ -216,3 +215,38 @@ def test_audit_log_never_stores_images(tmp_path: Path) -> None:
     assert header == list(COLUMNS)
     assert len(row) == len(COLUMNS)
     assert np.datetime64(row[0].replace("+00:00", ""))
+
+
+def test_web_endpoints_serve_page_risk_and_screening(
+    tmp_path: Path, write_checkpoint: CheckpointWriter, make_fundus: FundusFactory
+) -> None:
+    import cv2  # noqa: PLC0415
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from drscreen.app.web import build_web  # noqa: PLC0415
+
+    audit = AuditLog(tmp_path / "log.csv")
+    client = TestClient(build_web(_screener(write_checkpoint, 0, 2), RISK, audit))
+    assert "Screen a photo" in client.get("/").text
+
+    risk = client.post(
+        "/api/risk",
+        json={
+            "diabetes_duration_years": 25,
+            "hba1c_percent": 9.5,
+            "fasting_glucose_mg_dl": None,
+            "systolic_bp_mmhg": 150,
+            "age_years": 64,
+            "kidney_disease": True,
+        },
+    ).json()
+    assert (risk["tier"], risk["points"], risk["max_points"]) == ("high", 7, 7)
+    assert client.post("/api/risk", json={"age_years": 5}).status_code == 422
+
+    assert client.post("/api/screen", files={"file": b"not an image"}).status_code == 400
+    _, png = cv2.imencode(".png", cv2.cvtColor(make_fundus(), cv2.COLOR_RGB2BGR))
+    body = client.post("/api/screen", files={"file": png.tobytes()}).json()
+    assert body["grade"]["grade"] == 2
+    assert body["grade"]["refer"] is True
+    assert body["grade"]["heatmap"].startswith("data:image/jpeg;base64,")
+    assert _audit_rows(audit.path)[1][2] == "2"

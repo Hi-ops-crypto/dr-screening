@@ -6,6 +6,9 @@ assigns an ICDR grade from 0 to 4 and the app shows screening guidance with a
 Grad-CAM heatmap. A separate calculator turns clinical risk factors into a
 screening-priority tier.
 
+**Live demo:** https://bhmeha--dr-screening-web.modal.run ·
+**Weights:** https://huggingface.co/synchrono/dr-screening-models
+
 > **This is a screening aid, not a medical diagnosis.** It is not a medical
 > device, has not been clinically validated and must not be used for patient
 > care.
@@ -21,7 +24,7 @@ screening-priority tier.
 | 5. Grad-CAM | done |
 | 6. Inference | done |
 | 7. Risk calculator | done |
-| 8. Web app and deployment | done locally; Hugging Face Space not yet published |
+| 8. Web app and deployment | done; live on Modal |
 
 Trained weights are not in git. The app expects them in `models/` (see Deployment).
 
@@ -34,6 +37,11 @@ On IDRiD, 516 photos from a clinic none of the models trained on:
 | v1: B0, APTOS only | 52% | 91% | 0.75 (0.71-0.79) | 89% / 79% |
 | v2+v3: B0 and B3 on APTOS + EyePACS train, averaged | 64% | 93% | 0.83 (0.79-0.86) | 96% / 69% |
 | **v4: B3 on APTOS + EyePACS train and test labels + DDR** (served) | **71%** | **94%** | **0.87 (0.84-0.89)** | **98% / 69%** |
+| v4 + v5 (ConvNeXt-Small, same data), averaged; not served | 71% | 93% | 0.86 (0.83-0.88) | 99% / 61% |
+
+v5 alone scored below v4 (validation QWK 0.818 against 0.834; IDRiD 0.79).
+Averaging it with v4 raised validation QWK only to 0.841 at about four times
+the CPU time per photo and did not help on IDRiD, so v4 stays the served model.
 
 Referral uses the tuned threshold (95% sensitivity on validation). Site
 adaptation to IDRiD (fine-tuning v4 on its 330 training photos) raised exact

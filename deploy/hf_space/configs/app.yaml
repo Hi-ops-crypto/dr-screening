@@ -5,8 +5,8 @@ checkpoints:
   # Upload both best.pt files to a Hub model repository, then pin the commit
   # that contains them. The app refuses to start until revision is a full sha.
   hub:
-    repo_id: YOUR-USER/dr-screening-models
-    revision: REPLACE-WITH-40-CHARACTER-COMMIT-SHA
+    repo_id: synchrono/dr-screening-models
+    revision: 2cf9dccc3c004b805f29fff2b3537a2368bc88e7
   quality: quality.pt
   grading: [grading-v4.pt]
 

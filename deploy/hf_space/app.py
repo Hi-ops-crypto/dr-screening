@@ -2,10 +2,12 @@
 
 from pathlib import Path
 
-from drscreen.app.ui import AppConfig, create_app, launch
+import uvicorn
+
+from drscreen.app.ui import AppConfig
+from drscreen.app.web import create_web
 from drscreen.config import load_config
 from drscreen.logging_setup import configure_logging
 
 configure_logging("INFO")
-# Spaces set GRADIO_SERVER_NAME, so the app listens on all interfaces there.
-launch(create_app(load_config(Path("configs/app.yaml"), AppConfig)))
+uvicorn.run(create_web(load_config(Path("configs/app.yaml"), AppConfig)), host="0.0.0.0", port=7860)
